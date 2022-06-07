@@ -3,6 +3,8 @@ import autograd.numpy as np
 from autograd.scipy.special import multigammaln, digamma
 from functools import partial
 
+from .distribution import ExpDistribution
+
 
 T = lambda X: np.swapaxes(X, axis1=-1, axis2=-2)
 symmetrize = lambda X: (X + T(X)) / 2.0
@@ -10,12 +12,12 @@ outer = lambda x, y: x[..., :, None] * y[..., None, :]
 vs, hs = partial(np.concatenate, axis=-2), partial(np.concatenate, axis=-1)
 
 
-class NormalInverseWishart:
-    def __init__(self):
-        pass
+class NormalInverseWishart(ExpDistribution):
+    def __init__(self, nat_param):
+        super().__init__(nat_param)
 
-    def expected_stats(self, natparam, fudge=1e-8):
-        S, m, kappa, nu = self.natural_to_standard(natparam)
+    def expected_stats(self, fudge=1e-8):
+        S, m, kappa, nu = self.natural_to_standard()
         d = m.shape[-1]
 
         E_J = nu[..., None, None] * symmetrize(np.linalg.inv(S)) + fudge * np.eye(d)
@@ -30,8 +32,8 @@ class NormalInverseWishart:
             -1.0 / 2 * E_J, E_h, -1.0 / 2 * E_hTJinvh, 1.0 / 2 * E_logdetJ
         )
 
-    def logZ(self, natparam):
-        S, m, kappa, nu = self.natural_to_standard(natparam)
+    def logZ(self):
+        S, m, kappa, nu = self.natural_to_standard()
         d = m.shape[-1]
         return np.sum(
             d * nu / 2.0 * np.log(2.0)
@@ -40,8 +42,8 @@ class NormalInverseWishart:
             - d / 2.0 * np.log(kappa)
         )
 
-    def natural_to_standard(self, natparam):
-        A, b, kappa, nu = unpack_dense(natparam)
+    def natural_to_standard(self):
+        A, b, kappa, nu = unpack_dense(self.nat_param)
         m = b / np.expand_dims(kappa, -1)
         S = A - outer(b, m)
         return S, m, kappa, nu

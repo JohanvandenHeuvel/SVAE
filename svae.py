@@ -1,14 +1,26 @@
 import torch
-from torch import nn
 
 import numpy as np
 
 from distributions import Gaussian, NormalInverseWishart, Dirichlet, Categorical
 
-from label import Label
-
-
 def initialize_global_parameters(K, N, alpha, niw_conc=10.0, random_scale=0.0):
+    """
+
+    Parameters
+    ----------
+    K:
+    N:
+        Number of data-points.
+    alpha
+    niw_conc
+    random_scale
+
+    Returns
+    -------
+
+    """
+
     def initialize_niw_natural_parameters(N):
         nu, S, m, kappa = (
             N + niw_conc,
@@ -29,22 +41,29 @@ def initialize_global_parameters(K, N, alpha, niw_conc=10.0, random_scale=0.0):
     return dirichlet_natural_parameters, niw_natural_parameters
 
 
-def prior_kld(eta_theta, eta_theta_prior):
+def initialize_meanfield(label_parameters, potentials):
+    T = len(potentials)
+    K = len(label_parameters)
+    x = np.random.rand(T, K)
+    return x / np.sum(x, axis=-1, keepdims=True)
 
-    dirichlet_natparams, niw_natparams = eta_theta
-    dirichlet_natparams_prior, niw_natparams_prior = eta_theta_prior
+
+def prior_kld(eta_theta, eta_theta_prior):
+    dir_params, niw_params = eta_theta
+    dir_params_prior, niw_params_prior = eta_theta_prior
+
+    dir = Dirichlet(dir_params)
+    niw = NormalInverseWishart(niw_params)
+
+    dir_prior = Dirichlet(dir_params_prior)
+    niw_prior = NormalInverseWishart(niw_params_prior)
 
     expected_statistics = [
-        Dirichlet.expected_stats(dirichlet_natparams),
-        NormalInverseWishart.expected_stats(niw_natparams),
+        dir.expected_stats(),
+        niw.expected_stats(),
     ]
     difference = eta_theta - eta_theta_prior
-    logZ_difference = (
-        Dirichlet.logZ(dirichlet_natparams) + NormalInverseWishart.logZ(niw_natparams)
-    ) - (
-        Dirichlet.logZ(dirichlet_natparams_prior)
-        + NormalInverseWishart.logZ(niw_natparams_prior)
-    )
+    logZ_difference = (dir.logZ() + niw.logZ()) - (dir_prior.logZ() + niw_prior.logZ())
 
     return torch.dot(difference, expected_statistics) - logZ_difference
 
@@ -71,18 +90,19 @@ class SVAE:
         """
         priors
         """
-        label_parameters = Dirichlet.expected_stats(eta_theta)
-        gaussian_parameters = NormalInverseWishart.expected_stats(eta_theta)
+        dir_param, niw_param = eta_theta
+        label_parameters = Dirichlet(dir_param).expected_stats()
+        gaussian_parameters = NormalInverseWishart(niw_param).expected_stats()
 
         """
         optimize local variational parameters
         """
+        # TODO initialize in the correct format
         eta_z = 0
         eta_x = 0
 
-        label_stats = Label.expected_stats(eta_z)
+        label_stats = initialize_meanfield(label_parameters, potentials)
         for i in range(epochs):
-
             """
             Gaussian x
             """
@@ -90,7 +110,7 @@ class SVAE:
                 label_stats, gaussian_parameters, [[1], [0]]
             )
             eta_x = gaussian_potentials + potentials
-            gaussian_stats = Gaussian.expected_stats(eta_x)
+            gaussian_stats = Gaussian(eta_x).expected_stats()
 
             """
             Label z
@@ -99,16 +119,16 @@ class SVAE:
                 gaussian_stats, gaussian_parameters, [[1, 2], [1, 2]]
             )
             eta_z = label_potentials + label_parameters
-            label_stats = Label.expected_stats(eta_z)
+            label_stats = Categorical(eta_z).expected_stats()
 
         """
         KL-Divergence
         """
-        label_kld = torch.tensordot(label_stats, label_potentials) - Categorical.logZ(
-            eta_z
+        label_kld = (
+            torch.tensordot(label_stats, label_potentials) - Categorical(eta_z).logZ()
         )
-        gaussian_kld = torch.tensordot(potentials, gaussian_stats, 3) - Gaussian.logZ(
-            eta_x
+        gaussian_kld = (
+            torch.tensordot(potentials, gaussian_stats, 3) - Gaussian(eta_x).logZ()
         )
         local_kld = label_kld + gaussian_kld
 
@@ -160,50 +180,50 @@ class SVAE:
 
         return gaussian_loss - kld_loss
 
-
-def train(self, y, epochs):
-    """
-    Find the optimum for global variational parameter eta_theta, and encoder/decoder parameters.
-
-    Parameters
-    ----------
-    y:
-        Observations
-    epochs:
-        Number of epochs to train.
-    """
-    N, K = y.shape
-
-    eta_theta_prior = initialize_global_parameters(K, N, alpha=0.05 / K, niw_conc=0.5)
-    eta_theta = initialize_global_parameters(
-        K, N, alpha=1.0, niw_conc=1.0, random_scale=3.0
-    )
-
-    vae_optimizer = torch.optim.SGD(self.vae, 0.1)
-    for epoch in range(epochs):
-
+    def train(self, y, epochs=20):
         """
-        Find local optimum for local variational parameter eta_x
-        """
-        eta_x, eta_z, prior_stats, local_kld = self.local_optimization(y, eta_theta)
+        Find the optimum for global variational parameter eta_theta, and encoder/decoder parameters.
 
-        # TODO use re-parameterization for this sampling
-        x = Gaussian(eta_x).rsample()
-
+        Parameters
+        ----------
+        y:
+            Observations
+        epochs:
+            Number of epochs to train.
         """
-        Update global variational parameter eta_theta using natural gradient
-        """
-        nat_grad = self.natural_gradient(prior_stats, eta_theta, eta_theta_prior, N)
+        N, K = y.shape
 
-        # TODO should add own version of SGD here
-        eta_theta -= nat_grad
+        eta_theta_prior = initialize_global_parameters(
+            K, N, alpha=0.05 / K, niw_conc=0.5
+        )
+        eta_theta = initialize_global_parameters(
+            K, N, alpha=1.0, niw_conc=1.0, random_scale=3.0
+        )
 
-        """
-        Update encoder/decoder parameters using automatic differentiation
-        """
-        global_kld = prior_kld(eta_theta, eta_theta_prior)
+        vae_optimizer = torch.optim.SGD(self.vae, 0.1)
+        for epoch in range(epochs):
+            """
+            Find local optimum for local variational parameter eta_x, eta_z
+            """
+            eta_x, eta_z, prior_stats, local_kld = self.local_optimization(y, eta_theta)
 
-        vae_optimizer.zero_grad()
-        loss = self.svae_objective(x, n_batches, global_kld, local_kld)
-        loss.backward()
-        vae_optimizer.step()
+            # TODO use re-parameterization for this sampling
+            x = Gaussian(eta_x).rsample()
+
+            """
+            Update global variational parameter eta_theta using natural gradient
+            """
+            nat_grad = self.natural_gradient(prior_stats, eta_theta, eta_theta_prior, N)
+
+            # TODO should add own version of SGD here
+            eta_theta -= nat_grad
+
+            """
+            Update encoder/decoder parameters using automatic differentiation
+            """
+            global_kld = prior_kld(eta_theta, eta_theta_prior)
+
+            vae_optimizer.zero_grad()
+            loss = self.svae_objective(x, n_batches, global_kld, local_kld)
+            loss.backward()
+            vae_optimizer.step()
