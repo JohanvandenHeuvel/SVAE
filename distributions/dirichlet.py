@@ -8,9 +8,6 @@ class Dirichlet(ExpDistribution):
         super().__init__(nat_param)
 
     def expected_stats(self):
-        """
-        E[log X]
-        """
         alpha = self.natural_to_standard()
         stats = torch.digamma(alpha) - torch.digamma(alpha.sum())
         return stats

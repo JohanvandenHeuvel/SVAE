@@ -8,10 +8,28 @@ class Gaussian(ExpDistribution):
         super().__init__(nat_param)
 
     def expected_stats(self):
-        return 0
+        """Compute the expected statistics of the multivariate Gaussian.
+
+        Returns
+        -------
+        E_x : torch.Tensor
+            Expected value of x
+        E_xxT : torch.Tensor
+            Expected value of xxT
+        """
+        loc, scale = self.natural_to_standard()
+
+        E_x = loc
+        E_xxT = scale + torch.outer(E_x, E_x)
+
+        return E_x, E_xxT
 
     def logZ(self):
-        pass
+        loc, scale = self.natural_to_standard()
+        value = (
+            -1 / 2 * (torch.log(torch.det(scale)) + loc.T @ torch.inverse(scale) @ loc)
+        )
+        return value
 
     def natural_to_standard(self):
         eta_1, eta_2 = self.nat_param

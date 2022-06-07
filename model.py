@@ -60,8 +60,8 @@ class resVAE(nn.Module):
         log_var_dec_identity = nn.Linear(latent_dim, input_size)
 
         # "res net"
-        self.mu_dec_res = AddModule(self.mu_dec, self.mu_dec_identity)
-        self.log_var_dec_res = AddModule(self.log_var_dec, self.log_var_dec_identity)
+        self.mu_dec_res = AddModule(mu_dec, mu_dec_identity)
+        self.log_var_dec_res = AddModule(log_var_dec, log_var_dec_identity)
 
     def encode(self, x):
         return self.mu_enc_res(x), self.log_var_enc_res(x)

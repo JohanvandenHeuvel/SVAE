@@ -2,16 +2,20 @@ import torch
 
 import numpy as np
 
+from torch.utils.data import DataLoader
+
 from distributions import Gaussian, NormalInverseWishart, Dirichlet, Categorical
 
-def initialize_global_parameters(K, N, alpha, niw_conc=10.0, random_scale=0.0):
+
+def initialize_global_parameters(K, D, alpha, niw_conc=10.0, random_scale=0.0):
     """
 
     Parameters
     ----------
     K:
-    N:
-        Number of data-points.
+        Number of clusters.
+    D:
+        Number of dimensions.
     alpha
     niw_conc
     random_scale
@@ -29,20 +33,25 @@ def initialize_global_parameters(K, N, alpha, niw_conc=10.0, random_scale=0.0):
             niw_conc,
         )
         m = m + random_scale * np.random.rand(*m.shape)
-        return NormalInverseWishart().standard_to_natural(S, m, kappa, nu)
+
+        nu = torch.Tensor([nu]).unsqueeze(0)
+        S = torch.Tensor(S).unsqueeze(0)
+        m = torch.Tensor(m).unsqueeze(0)
+        kappa = torch.Tensor([kappa]).unsqueeze(0)
+
+        return NormalInverseWishart(None).standard_to_natural(kappa, m, S, nu)
 
     dirichlet_natural_parameters = alpha * (
-        np.random.rand(K) if random_scale else np.ones(K)
+        torch.rand(K) if random_scale else torch.ones(K)
     )
-    niw_natural_parameters = np.stack(
-        [initialize_niw_natural_parameters(N) for _ in range(K)]
-    )
+    niw_natural_parameters = list(zip(*[initialize_niw_natural_parameters(D) for _ in range(K)]))
+    niw_natural_parameters = [torch.stack(i).squeeze() for i in niw_natural_parameters]
 
     return dirichlet_natural_parameters, niw_natural_parameters
 
 
 def initialize_meanfield(label_parameters, potentials):
-    T = len(potentials)
+    T = len(potentials[0])
     K = len(label_parameters)
     x = np.random.rand(T, K)
     return x / np.sum(x, axis=-1, keepdims=True)
@@ -141,7 +150,7 @@ class SVAE:
 
         return eta_x, eta_z, prior_stats, local_kld
 
-    def natural_gradient(self, stats, eta_theta, eta_theta_prior, N, scale=1.0):
+    def natural_gradient(self, stats, eta_theta, eta_theta_prior, D, scale=1.0):
         """
         Natural gradient for the global variational parameters eta_theta
 
@@ -151,12 +160,12 @@ class SVAE:
 
         eta_theta:
             Natural parameters for global variables.
-        N: int
-            Number of data-points.
+        D: int
+            Number of dimensions.
         scale: float
             Loss weight
         """
-        return -scale / N * (eta_theta_prior - eta_theta + N * stats)
+        return -scale / D * (eta_theta_prior - eta_theta + D * stats)
 
     def svae_objective(self, x, n_batches, global_kld, local_kld):
         """
@@ -180,7 +189,7 @@ class SVAE:
 
         return gaussian_loss - kld_loss
 
-    def train(self, y, epochs=20):
+    def train(self, y, K=15, batch_size=64, epochs=20):
         """
         Find the optimum for global variational parameter eta_theta, and encoder/decoder parameters.
 
@@ -191,16 +200,18 @@ class SVAE:
         epochs:
             Number of epochs to train.
         """
-        N, K = y.shape
+        _, D = y.shape
+
+        y = torch.Tensor(y)
 
         eta_theta_prior = initialize_global_parameters(
-            K, N, alpha=0.05 / K, niw_conc=0.5
+            K, D, alpha=0.05 / K, niw_conc=0.5
         )
         eta_theta = initialize_global_parameters(
-            K, N, alpha=1.0, niw_conc=1.0, random_scale=3.0
+            K, D, alpha=1.0, niw_conc=1.0, random_scale=3.0
         )
 
-        vae_optimizer = torch.optim.SGD(self.vae, 0.1)
+        vae_optimizer = torch.optim.SGD(self.vae.parameters(), 0.1)
         for epoch in range(epochs):
             """
             Find local optimum for local variational parameter eta_x, eta_z
@@ -213,7 +224,7 @@ class SVAE:
             """
             Update global variational parameter eta_theta using natural gradient
             """
-            nat_grad = self.natural_gradient(prior_stats, eta_theta, eta_theta_prior, N)
+            nat_grad = self.natural_gradient(prior_stats, eta_theta, eta_theta_prior, D)
 
             # TODO should add own version of SGD here
             eta_theta -= nat_grad

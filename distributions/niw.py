@@ -1,74 +1,71 @@
-from __future__ import division
-import autograd.numpy as np
-from autograd.scipy.special import multigammaln, digamma
-from functools import partial
-
 from .distribution import ExpDistribution
 
+import torch
+import numpy as np
 
-T = lambda X: np.swapaxes(X, axis1=-1, axis2=-2)
-symmetrize = lambda X: (X + T(X)) / 2.0
-outer = lambda x, y: x[..., :, None] * y[..., None, :]
-vs, hs = partial(np.concatenate, axis=-2), partial(np.concatenate, axis=-1)
+from dense import pack_dense
+
+def multidigamma(input, p):
+    values = [torch.digamma(input - i/2) for i in range(p)]
+    return np.sum(values, axis=0)
 
 
 class NormalInverseWishart(ExpDistribution):
     def __init__(self, nat_param):
         super().__init__(nat_param)
 
-    def expected_stats(self, fudge=1e-8):
-        S, m, kappa, nu = self.natural_to_standard()
-        d = m.shape[-1]
+    def expected_stats(self):
+        """Compute Expected Statistics
 
-        E_J = nu[..., None, None] * symmetrize(np.linalg.inv(S)) + fudge * np.eye(d)
-        E_h = np.matmul(E_J, m[..., None])[..., 0]
-        E_hTJinvh = d / kappa + np.matmul(m[..., None, :], E_h[..., None])[..., 0, 0]
-        E_logdetJ = (
-            np.sum(digamma((nu[..., None] - np.arange(d)[None, ...]) / 2.0), -1)
-            + d * np.log(2.0)
-        ) - np.linalg.slogdet(S)[1]
+        E[T1] = E[-1/2 log(det(Sigma))]
+        E[T2] = E[-1/2 inv(Sigma)]
+        E[T3] = E[inv(Sigma) mu]
+        E[T4] = E[-1/2 muT inv(Sigma) mu]
+        """
+        kappa, mu_0, Phi, nu = self.natural_to_standard()
 
-        return pack_dense(
-            -1.0 / 2 * E_J, E_h, -1.0 / 2 * E_hTJinvh, 1.0 / 2 * E_logdetJ
+        _, p, _ = Phi.shape
+
+        E_T1 = (
+            1 / 2 * (torch.log(torch.det(Phi)) - torch.log(torch.Tensor([2])) - multidigamma(nu / 2, p))
         )
+        E_T2 = nu[..., None, None] / 2 * torch.inverse(Phi)
+        E_T3 = -2 * torch.bmm(E_T2, mu_0.unsqueeze(2)).squeeze()
+        E_T4 = torch.bmm(mu_0.unsqueeze(1), E_T3.unsqueeze(2)).squeeze() / -2 + p / 2 * kappa
+
+        return pack_dense(E_T2, E_T3, E_T4, E_T1)
 
     def logZ(self):
-        S, m, kappa, nu = self.natural_to_standard()
-        d = m.shape[-1]
-        return np.sum(
-            d * nu / 2.0 * np.log(2.0)
-            + multigammaln(nu / 2.0, d)
-            - nu / 2.0 * np.linalg.slogdet(S)[1]
-            - d / 2.0 * np.log(kappa)
+        kappa, mu_0, Phi, nu = self.natural_to_standard()
+
+        _, p, _ = Phi.shape
+
+        value = -nu / 2 * torch.log(torch.det(Phi))
+        (
+            -(nu * p / 2) * torch.log(2)
+            + torch.special.multigammaln(nu / 2, p)
+            + p / 2 * torch.log(2 * torch.pi * 1 / kappa)
         )
+        return value
 
     def natural_to_standard(self):
-        A, b, kappa, nu = unpack_dense(self.nat_param)
-        m = b / np.expand_dims(kappa, -1)
-        S = A - outer(b, m)
-        return S, m, kappa, nu
+        eta_1, eta_2, eta_3, eta_4 = self.nat_param
 
-    def standard_to_natural(self, S, m, kappa, nu):
-        b = np.expand_dims(kappa, -1) * m
-        A = S + outer(b, m)
-        return pack_dense(A, b, kappa, nu)
+        _, p, _ = eta_2.shape
 
+        kappa = eta_4
+        mu_0 = eta_3 / eta_4[..., None]
+        Phi = eta_2 - torch.einsum('bi,bj->bij', (eta_3, eta_3)) / eta_4[..., None, None]
+        nu = eta_1 - p - 2
 
-def pack_dense(A, b, *args):
-    """Used for packing Gaussian natural parameters and statistics into a dense
-    ndarray so that we can use tensordot for all the linear contraction ops."""
-    # we don't use a symmetric embedding because factors of 1/2 on h are a pain
-    leading_dim, N = b.shape[:-1], b.shape[-1]
-    z1, z2 = np.zeros(leading_dim + (N, 1)), np.zeros(leading_dim + (1, 1))
-    c, d = args if args else (z2, z2)
+        return kappa, mu_0, Phi, nu
 
-    A = A[..., None] * np.eye(N)[None, ...] if A.ndim == b.ndim else A
-    b = b[..., None]
-    c, d = np.reshape(c, leading_dim + (1, 1)), np.reshape(d, leading_dim + (1, 1))
+    def standard_to_natural(self, kappa, mu_0, Phi, nu):
+        _, p, _ = Phi.shape
 
-    return vs((hs((A, b, z1)), hs((T(z1), c, z2)), hs((T(z1), z2, d))))
+        eta_1 = nu + p + 2
+        eta_2 = Phi + kappa * torch.einsum('bi,bj->bij', (mu_0, mu_0))
+        eta_3 = kappa * mu_0
+        eta_4 = kappa
 
-
-def unpack_dense(arr):
-    N = arr.shape[-1] - 2
-    return arr[..., :N, :N], arr[..., :N, N], arr[..., N, N], arr[..., N + 1, N + 1]
+        return pack_dense(eta_2, eta_3, eta_4, eta_1)
