@@ -13,7 +13,11 @@ class Dirichlet(ExpDistribution):
         return stats
 
     def logZ(self):
-        return 1
+        alpha = self.natural_to_standard()
+        value = torch.sum(torch.special.gammaln(alpha), dim=-1) - torch.special.gammaln(
+            torch.sum(alpha, dim=-1)
+        )
+        return torch.sum(value)
 
     def natural_to_standard(self):
         return self.nat_param + 1

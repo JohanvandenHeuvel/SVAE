@@ -3,11 +3,11 @@ from .distribution import ExpDistribution
 import torch
 import numpy as np
 
-from dense import pack_dense
+from dense import pack_dense, unpack_dense
 
 def multidigamma(input, p):
-    values = [torch.digamma(input - i/2) for i in range(p)]
-    return np.sum(values, axis=0)
+    values = torch.stack([torch.digamma(input - i/2) for i in range(p)])
+    return torch.sum(values, dim=0)
 
 
 class NormalInverseWishart(ExpDistribution):
@@ -27,7 +27,7 @@ class NormalInverseWishart(ExpDistribution):
         _, p, _ = Phi.shape
 
         E_T1 = (
-            1 / 2 * (torch.log(torch.det(Phi)) - torch.log(torch.Tensor([2])) - multidigamma(nu / 2, p))
+            1 / 2 * (torch.slogdet(Phi)[1] - torch.log(torch.Tensor([2])) - multidigamma(nu / 2, p))
         )
         E_T2 = nu[..., None, None] / 2 * torch.inverse(Phi)
         E_T3 = -2 * torch.bmm(E_T2, mu_0.unsqueeze(2)).squeeze()
@@ -40,16 +40,16 @@ class NormalInverseWishart(ExpDistribution):
 
         _, p, _ = Phi.shape
 
-        value = -nu / 2 * torch.log(torch.det(Phi))
+        value = -nu / 2 * torch.slogdet(Phi)[1]
         (
-            -(nu * p / 2) * torch.log(2)
+            -(nu * p / 2) * torch.log(torch.ones_like(nu)*2)
             + torch.special.multigammaln(nu / 2, p)
             + p / 2 * torch.log(2 * torch.pi * 1 / kappa)
         )
-        return value
+        return torch.sum(value)
 
     def natural_to_standard(self):
-        eta_1, eta_2, eta_3, eta_4 = self.nat_param
+        eta_2, eta_3, eta_4, eta_1 = unpack_dense(self.nat_param)
 
         _, p, _ = eta_2.shape
 
@@ -63,9 +63,9 @@ class NormalInverseWishart(ExpDistribution):
     def standard_to_natural(self, kappa, mu_0, Phi, nu):
         _, p, _ = Phi.shape
 
-        eta_1 = nu + p + 2
         eta_2 = Phi + kappa * torch.einsum('bi,bj->bij', (mu_0, mu_0))
         eta_3 = kappa * mu_0
         eta_4 = kappa
+        eta_1 = nu + p + 2
 
         return pack_dense(eta_2, eta_3, eta_4, eta_1)

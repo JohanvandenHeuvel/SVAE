@@ -2,6 +2,8 @@ import torch
 
 from .distribution import ExpDistribution
 
+from dense import pack_dense, unpack_dense
+
 
 class Gaussian(ExpDistribution):
     def __init__(self, nat_param):
@@ -19,23 +21,31 @@ class Gaussian(ExpDistribution):
         """
         loc, scale = self.natural_to_standard()
 
-        E_x = loc
-        E_xxT = scale + torch.outer(E_x, E_x)
+        assert scale.ndim == 3
 
-        return E_x, E_xxT
+        E_x = loc
+        E_xxT = scale + torch.einsum("bi,bj->bij", (E_x, E_x))
+        E_n = torch.ones(len(scale))
+
+        return pack_dense(E_xxT, E_x, E_n, E_n)
 
     def logZ(self):
         loc, scale = self.natural_to_standard()
         value = (
-            -1 / 2 * (torch.log(torch.det(scale)) + loc.T @ torch.inverse(scale) @ loc)
+            -1
+            / 2
+            * (
+                torch.slogdet(scale)[1]
+                + torch.bmm(loc.unsqueeze(1), torch.bmm(torch.inverse(scale), loc[..., None])).squeeze()
+            )
         )
         return value
 
     def natural_to_standard(self):
-        eta_1, eta_2 = self.nat_param
+        eta_2, eta_1, _, _ = unpack_dense(self.nat_param)
 
-        loc = -1 / 2 * torch.inverse(eta_2) @ eta_1
         scale = -1 / 2 * torch.inverse(eta_2)
+        loc = torch.bmm(scale, eta_1[..., None]).squeeze()
 
         return loc, scale
 
@@ -43,4 +53,11 @@ class Gaussian(ExpDistribution):
         eta_1 = torch.inverse(scale) @ loc
         eta_2 = torch.flatten(-1 / 2 * torch.inverse(scale))
 
-        return eta_1, eta_2
+        return pack_dense(eta_2, eta_1)
+
+    def rsample(self):
+        loc, scale = self.natural_to_standard()
+        eps = torch.randn_like(loc)
+
+        return loc + torch.matmul(scale, torch.ones(loc.shape[1])) * eps
+

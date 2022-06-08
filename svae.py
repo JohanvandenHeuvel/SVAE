@@ -6,6 +6,10 @@ from torch.utils.data import DataLoader
 
 from distributions import Gaussian, NormalInverseWishart, Dirichlet, Categorical
 
+from dense import pack_dense
+
+import matplotlib.pyplot as plt
+
 
 def initialize_global_parameters(K, D, alpha, niw_conc=10.0, random_scale=0.0):
     """
@@ -44,17 +48,18 @@ def initialize_global_parameters(K, D, alpha, niw_conc=10.0, random_scale=0.0):
     dirichlet_natural_parameters = alpha * (
         torch.rand(K) if random_scale else torch.ones(K)
     )
-    niw_natural_parameters = list(zip(*[initialize_niw_natural_parameters(D) for _ in range(K)]))
-    niw_natural_parameters = [torch.stack(i).squeeze() for i in niw_natural_parameters]
+    niw_natural_parameters = torch.cat(
+        [initialize_niw_natural_parameters(D) for _ in range(K)], dim=0
+    )
 
     return dirichlet_natural_parameters, niw_natural_parameters
 
 
 def initialize_meanfield(label_parameters, potentials):
-    T = len(potentials[0])
+    T = len(potentials)
     K = len(label_parameters)
-    x = np.random.rand(T, K)
-    return x / np.sum(x, axis=-1, keepdims=True)
+    x = torch.rand(T, K)
+    return x / torch.sum(x, dim=-1, keepdim=True)
 
 
 def prior_kld(eta_theta, eta_theta_prior):
@@ -70,11 +75,12 @@ def prior_kld(eta_theta, eta_theta_prior):
     expected_statistics = [
         dir.expected_stats(),
         niw.expected_stats(),
-    ]
-    difference = eta_theta - eta_theta_prior
+    ][0][0]
+    difference = eta_theta[0][0] - eta_theta_prior[0][0]
     logZ_difference = (dir.logZ() + niw.logZ()) - (dir_prior.logZ() + niw_prior.logZ())
 
-    return torch.dot(difference, expected_statistics) - logZ_difference
+    # return torch.dot(difference, expected_statistics) - logZ_difference
+    return difference * expected_statistics - logZ_difference
 
 
 class SVAE:
@@ -94,7 +100,8 @@ class SVAE:
         epochs: int
             Number of epochs to train.
         """
-        potentials = self.vae.encode(y)
+        mu, log_var = self.vae.encode(y)
+        potentials = pack_dense(log_var, mu)
 
         """
         priors
@@ -165,9 +172,16 @@ class SVAE:
         scale: float
             Loss weight
         """
-        return -scale / D * (eta_theta_prior - eta_theta + D * stats)
 
-    def svae_objective(self, x, n_batches, global_kld, local_kld):
+        def nat_grad(prior, post, s):
+            return -scale / D * (prior - post + D * s)
+
+        return (
+            nat_grad(eta_theta_prior[0], eta_theta[0], stats[0]),
+            nat_grad(eta_theta_prior[1], eta_theta[1], stats[1]),
+        )
+
+    def svae_objective(self, x, y, global_kld, local_kld):
         """
         Monto Carlo estimate of SVAE ELBO
 
@@ -183,9 +197,9 @@ class SVAE:
 
         """
 
-        gaussian_loss = n_batches * self.vae.log_likelihood(x, get_batch(i))
+        gaussian_loss = self.vae.log_likelihood(x, y)
 
-        kld_loss = global_kld - n_batches * local_kld
+        kld_loss = global_kld - local_kld
 
         return gaussian_loss - kld_loss
 
@@ -218,8 +232,12 @@ class SVAE:
             """
             eta_x, eta_z, prior_stats, local_kld = self.local_optimization(y, eta_theta)
 
-            # TODO use re-parameterization for this sampling
             x = Gaussian(eta_x).rsample()
+
+            # VISUALIZE
+            # x_list, y_list = zip(*x.detach().numpy())
+            # plt.scatter(x_list, y_list)
+            # plt.show()
 
             """
             Update global variational parameter eta_theta using natural gradient
@@ -227,7 +245,7 @@ class SVAE:
             nat_grad = self.natural_gradient(prior_stats, eta_theta, eta_theta_prior, D)
 
             # TODO should add own version of SGD here
-            eta_theta -= nat_grad
+            eta_theta = tuple([eta_theta[i] - nat_grad[i] for i in range(len(eta_theta))])
 
             """
             Update encoder/decoder parameters using automatic differentiation
@@ -235,6 +253,6 @@ class SVAE:
             global_kld = prior_kld(eta_theta, eta_theta_prior)
 
             vae_optimizer.zero_grad()
-            loss = self.svae_objective(x, n_batches, global_kld, local_kld)
+            loss = self.svae_objective(x, y, global_kld, local_kld)
             loss.backward()
             vae_optimizer.step()
