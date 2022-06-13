@@ -72,9 +72,7 @@ def prior_kld(eta_theta, eta_theta_prior):
     dir_prior = Dirichlet(dir_params_prior)
     niw_prior = NormalInverseWishart(niw_params_prior)
 
-    expected_statistics = [dir.expected_stats(), niw.expected_stats(),][
-        0
-    ][0]
+    expected_statistics = [dir.expected_stats(), niw.expected_stats(), ][0][0]
     difference = eta_theta[0][0] - eta_theta_prior[0][0]
     logZ_difference = (dir.logZ() + niw.logZ()) - (dir_prior.logZ() + niw_prior.logZ())
 
@@ -99,7 +97,6 @@ class SVAE:
         epochs: int
             Number of epochs to train.
         """
-
 
         """
         priors
@@ -156,8 +153,8 @@ class SVAE:
         """
         Statistics
         """
-        dirichlet_stats = torch.sum(label_stats, 0)
-        niw_stats = torch.tensordot(label_stats, gaussian_stats, [[0], [0]])
+        dirichlet_stats = torch.sum(label_stats, 0).detach()
+        niw_stats = torch.tensordot(label_stats, gaussian_stats, [[0], [0]]).detach()
         prior_stats = dirichlet_stats, niw_stats
 
         return eta_x, eta_z, prior_stats, local_kld
@@ -237,7 +234,6 @@ class SVAE:
 
             total_loss = 0
             for i, y in enumerate(dataloader):
-
                 # Force scale to be positive, and it's negative inverse to be negative
                 mu, log_var = self.vae.encode(y.float())
                 scale = -torch.exp(0.5 * log_var)
@@ -263,8 +259,6 @@ class SVAE:
                 eta_theta = tuple(
                     [eta_theta[i] - nat_grad[i] for i in range(len(eta_theta))]
                 )
-                # TODO fix this, should not be detached
-                eta_theta = [eta_theta[i].detach() for i in range(len(eta_theta))]
 
                 """
                 Update encoder/decoder parameters using automatic differentiation
