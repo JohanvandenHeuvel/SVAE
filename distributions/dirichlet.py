@@ -9,7 +9,7 @@ class Dirichlet(ExpDistribution):
 
     def expected_stats(self):
         alpha = self.natural_to_standard()
-        stats = torch.digamma(alpha) - torch.digamma(alpha.sum())
+        stats = torch.digamma(alpha) - torch.digamma(torch.sum(alpha, -1, keepdim=True))
         return stats
 
     def logZ(self):

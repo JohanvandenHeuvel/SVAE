@@ -59,7 +59,8 @@ def initialize_meanfield(label_parameters, potentials):
     T = len(potentials)
     K = len(label_parameters)
     x = torch.rand(T, K)
-    return x / torch.sum(x, dim=-1, keepdim=True)
+    value = x / torch.sum(x, dim=-1, keepdim=True)
+    return value
 
 
 def prior_kld(eta_theta, eta_theta_prior):
@@ -100,8 +101,11 @@ class SVAE:
         epochs: int
             Number of epochs to train.
         """
-        mu, log_var = self.vae.encode(y)
-        potentials = pack_dense(log_var, mu)
+
+        # Force scale to be positive, and it's negative inverse to be negative
+        mu, log_var = self.vae.encode(y.float())
+        scale = -torch.exp(0.5 * log_var)
+        potentials = pack_dense(scale, mu)
 
         """
         priors
@@ -203,20 +207,20 @@ class SVAE:
 
         return gaussian_loss - kld_loss
 
-    def train(self, y, K=15, batch_size=64, epochs=20):
+    def train(self, obs, K=15, batch_size=64, epochs=20):
         """
         Find the optimum for global variational parameter eta_theta, and encoder/decoder parameters.
 
         Parameters
         ----------
-        y:
+        obs:
             Observations
         epochs:
             Number of epochs to train.
         """
-        _, D = y.shape
+        _, D = obs.shape
 
-        y = torch.Tensor(y)
+        dataloader = DataLoader(obs, batch_size=500, shuffle=True)
 
         eta_theta_prior = initialize_global_parameters(
             K, D, alpha=0.05 / K, niw_conc=0.5
@@ -227,32 +231,40 @@ class SVAE:
 
         vae_optimizer = torch.optim.SGD(self.vae.parameters(), 0.1)
         for epoch in range(epochs):
-            """
-            Find local optimum for local variational parameter eta_x, eta_z
-            """
-            eta_x, eta_z, prior_stats, local_kld = self.local_optimization(y, eta_theta)
 
-            x = Gaussian(eta_x).rsample()
+            for i, y in enumerate(dataloader):
+                """
+                Find local optimum for local variational parameter eta_x, eta_z
+                """
+                eta_x, eta_z, prior_stats, local_kld = self.local_optimization(
+                    y, eta_theta
+                )
 
-            # VISUALIZE
-            # x_list, y_list = zip(*x.detach().numpy())
-            # plt.scatter(x_list, y_list)
-            # plt.show()
+                x = Gaussian(eta_x).rsample()
 
-            """
-            Update global variational parameter eta_theta using natural gradient
-            """
-            nat_grad = self.natural_gradient(prior_stats, eta_theta, eta_theta_prior, D)
+                # VISUALIZE
+                # x_list, y_list = zip(*x.detach().numpy())
+                # plt.scatter(x_list, y_list)
+                # plt.show()
 
-            # TODO should add own version of SGD here
-            eta_theta = tuple([eta_theta[i] - nat_grad[i] for i in range(len(eta_theta))])
+                """
+                Update global variational parameter eta_theta using natural gradient
+                """
+                nat_grad = self.natural_gradient(
+                    prior_stats, eta_theta, eta_theta_prior, D
+                )
 
-            """
-            Update encoder/decoder parameters using automatic differentiation
-            """
-            global_kld = prior_kld(eta_theta, eta_theta_prior)
+                # TODO should add own version of SGD here
+                eta_theta = tuple(
+                    [eta_theta[i] - nat_grad[i] for i in range(len(eta_theta))]
+                )
 
-            vae_optimizer.zero_grad()
-            loss = self.svae_objective(x, y, global_kld, local_kld)
-            loss.backward()
-            vae_optimizer.step()
+                """
+                Update encoder/decoder parameters using automatic differentiation
+                """
+                global_kld = prior_kld(eta_theta, eta_theta_prior)
+
+                vae_optimizer.zero_grad()
+                loss = self.svae_objective(x, y, global_kld, local_kld)
+                loss.backward()
+                vae_optimizer.step()
