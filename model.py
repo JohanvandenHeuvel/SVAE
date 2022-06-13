@@ -19,7 +19,6 @@ def reparameterize(mu, log_var):
 
 class resVAE(nn.Module):
     def __init__(self, input_size, hidden_size, latent_dim):
-
         super(resVAE, self).__init__()
 
         """

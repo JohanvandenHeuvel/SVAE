@@ -1,13 +1,9 @@
-import torch
-from matplotlib import pyplot as plt
-from torchviz import make_dot
 import numpy as np
-
+import torch
 from torch.utils.data import DataLoader
 
-from distributions import Gaussian, NormalInverseWishart, Dirichlet, Categorical, gaussian
-
-from dense import pack_dense, unpack_dense
+from dense import pack_dense
+from distributions import Gaussian, NormalInverseWishart, Dirichlet, Categorical
 from plot import plot_latents
 
 
@@ -52,6 +48,9 @@ def initialize_global_parameters(K, D, alpha, niw_conc=10.0, random_scale=0.0):
         [initialize_niw_natural_parameters(D) for _ in range(K)], dim=0
     )
 
+    dirichlet_natural_parameters = dirichlet_natural_parameters.detach()
+    niw_natural_parameters = niw_natural_parameters.detach()
+
     return dirichlet_natural_parameters, niw_natural_parameters
 
 
@@ -87,7 +86,7 @@ class SVAE:
     def __init__(self, vae):
         self.vae = vae
 
-    def local_optimization(self, potentials, eta_theta, epochs=1000):
+    def local_optimization(self, potentials, eta_theta, epochs=20):
         """
         Find the optimum for local variational parameters eta_x, eta_z
 
@@ -112,10 +111,6 @@ class SVAE:
         """
         optimize local variational parameters
         """
-        # TODO initialize in the correct format
-        eta_z = 0
-        eta_x = 0
-
         label_stats = initialize_meanfield(label_parameters, potentials)
         for i in range(epochs):
             """
@@ -136,6 +131,17 @@ class SVAE:
             eta_z = label_potentials + label_parameters
             label_stats = Categorical(eta_z).expected_stats()
 
+        # label_stats = label_stats.detach()
+        # gaussian_potentials = torch.tensordot(
+        #     label_stats, gaussian_parameters, [[1], [0]]
+        # )
+        # eta_x = gaussian_potentials + potentials
+        # gaussian_stats = Gaussian(eta_x).expected_stats()
+        #
+        # label_potentials = torch.tensordot(
+        #     gaussian_stats, gaussian_parameters, [[1, 2], [1, 2]]
+        # )
+        # eta_z = label_potentials + label_parameters
         """
         KL-Divergence
         """
@@ -229,15 +235,13 @@ class SVAE:
         vae_optimizer = torch.optim.Adam(self.vae.parameters())
         for epoch in range(epochs):
 
-            print(f"Epoch:{epoch}/{epochs} [loss: {0:.3f}]")
-
+            total_loss = 0
             for i, y in enumerate(dataloader):
 
                 # Force scale to be positive, and it's negative inverse to be negative
                 mu, log_var = self.vae.encode(y.float())
                 scale = -torch.exp(0.5 * log_var)
                 potentials = pack_dense(scale, mu)
-                make_dot(mu, params=dict(self.vae.mu_enc_res.named_parameters()), show_attrs=True, show_saved=True).render()
 
                 """
                 Find local optimum for local variational parameter eta_x, eta_z
@@ -247,7 +251,6 @@ class SVAE:
                 )
 
                 x = Gaussian(eta_x).rsample()
-                plot_latents(x, eta_theta)
 
                 """
                 Update global variational parameter eta_theta using natural gradient
@@ -260,7 +263,8 @@ class SVAE:
                 eta_theta = tuple(
                     [eta_theta[i] - nat_grad[i] for i in range(len(eta_theta))]
                 )
-                plot_latents(x, eta_theta)
+                # TODO fix this, should not be detached
+                eta_theta = [eta_theta[i].detach() for i in range(len(eta_theta))]
 
                 """
                 Update encoder/decoder parameters using automatic differentiation
@@ -270,5 +274,11 @@ class SVAE:
                 mu, log_var = self.vae.decode(x)
                 vae_optimizer.zero_grad()
                 loss = self.svae_objective(x, y, mu, log_var, global_kld, local_kld)
-                loss.backward(retain_graph=True)
+                loss.backward()
                 vae_optimizer.step()
+
+                total_loss += loss
+
+            print(f"Epoch:{epoch}/{epochs} [loss: {total_loss:.3f}]")
+            if epoch % 1 == 0:
+                plot_latents(x, eta_theta)
