@@ -1,14 +1,14 @@
 import torch
-
+from matplotlib import pyplot as plt
+from torchviz import make_dot
 import numpy as np
 
 from torch.utils.data import DataLoader
 
-from distributions import Gaussian, NormalInverseWishart, Dirichlet, Categorical
+from distributions import Gaussian, NormalInverseWishart, Dirichlet, Categorical, gaussian
 
-from dense import pack_dense
-
-import matplotlib.pyplot as plt
+from dense import pack_dense, unpack_dense
+from plot import plot_latents
 
 
 def initialize_global_parameters(K, D, alpha, niw_conc=10.0, random_scale=0.0):
@@ -73,10 +73,9 @@ def prior_kld(eta_theta, eta_theta_prior):
     dir_prior = Dirichlet(dir_params_prior)
     niw_prior = NormalInverseWishart(niw_params_prior)
 
-    expected_statistics = [
-        dir.expected_stats(),
-        niw.expected_stats(),
-    ][0][0]
+    expected_statistics = [dir.expected_stats(), niw.expected_stats(),][
+        0
+    ][0]
     difference = eta_theta[0][0] - eta_theta_prior[0][0]
     logZ_difference = (dir.logZ() + niw.logZ()) - (dir_prior.logZ() + niw_prior.logZ())
 
@@ -88,24 +87,20 @@ class SVAE:
     def __init__(self, vae):
         self.vae = vae
 
-    def local_optimization(self, y, eta_theta, epochs=20):
+    def local_optimization(self, potentials, eta_theta, epochs=1000):
         """
         Find the optimum for local variational parameters eta_x, eta_z
 
         Parameters
         ----------
-        y: Tensor
-            Observations
+        potentials: Tensor
+
         eta_theta: Tensor
             Natural parameters for Q(theta)
         epochs: int
             Number of epochs to train.
         """
 
-        # Force scale to be positive, and it's negative inverse to be negative
-        mu, log_var = self.vae.encode(y.float())
-        scale = -torch.exp(0.5 * log_var)
-        potentials = pack_dense(scale, mu)
 
         """
         priors
@@ -185,7 +180,7 @@ class SVAE:
             nat_grad(eta_theta_prior[1], eta_theta[1], stats[1]),
         )
 
-    def svae_objective(self, x, y, global_kld, local_kld):
+    def svae_objective(self, x, y, mu, log_var, global_kld, local_kld):
         """
         Monto Carlo estimate of SVAE ELBO
 
@@ -193,6 +188,8 @@ class SVAE:
         ----------
         x: Tensor
             x_hat(phi) ~ q*(x), samples from the locally optimized q(x).
+        y:
+
         n_batches: int
             Number of batches.
         global_kld: float
@@ -201,13 +198,13 @@ class SVAE:
 
         """
 
-        gaussian_loss = self.vae.log_likelihood(x, y)
+        gaussian_loss = self.vae.log_likelihood(x, y, mu, log_var)
 
         kld_loss = global_kld - local_kld
 
         return gaussian_loss - kld_loss
 
-    def train(self, obs, K=15, batch_size=64, epochs=20):
+    def fit(self, obs, K=15, batch_size=64, epochs=20):
         """
         Find the optimum for global variational parameter eta_theta, and encoder/decoder parameters.
 
@@ -229,23 +226,28 @@ class SVAE:
             K, D, alpha=1.0, niw_conc=1.0, random_scale=3.0
         )
 
-        vae_optimizer = torch.optim.SGD(self.vae.parameters(), 0.1)
+        vae_optimizer = torch.optim.Adam(self.vae.parameters())
         for epoch in range(epochs):
 
+            print(f"Epoch:{epoch}/{epochs} [loss: {0:.3f}]")
+
             for i, y in enumerate(dataloader):
+
+                # Force scale to be positive, and it's negative inverse to be negative
+                mu, log_var = self.vae.encode(y.float())
+                scale = -torch.exp(0.5 * log_var)
+                potentials = pack_dense(scale, mu)
+                make_dot(mu, params=dict(self.vae.mu_enc_res.named_parameters()), show_attrs=True, show_saved=True).render()
+
                 """
                 Find local optimum for local variational parameter eta_x, eta_z
                 """
                 eta_x, eta_z, prior_stats, local_kld = self.local_optimization(
-                    y, eta_theta
+                    potentials, eta_theta
                 )
 
                 x = Gaussian(eta_x).rsample()
-
-                # VISUALIZE
-                # x_list, y_list = zip(*x.detach().numpy())
-                # plt.scatter(x_list, y_list)
-                # plt.show()
+                plot_latents(x, eta_theta)
 
                 """
                 Update global variational parameter eta_theta using natural gradient
@@ -258,13 +260,15 @@ class SVAE:
                 eta_theta = tuple(
                     [eta_theta[i] - nat_grad[i] for i in range(len(eta_theta))]
                 )
+                plot_latents(x, eta_theta)
 
                 """
                 Update encoder/decoder parameters using automatic differentiation
                 """
                 global_kld = prior_kld(eta_theta, eta_theta_prior)
 
+                mu, log_var = self.vae.decode(x)
                 vae_optimizer.zero_grad()
-                loss = self.svae_objective(x, y, global_kld, local_kld)
-                loss.backward()
+                loss = self.svae_objective(x, y, mu, log_var, global_kld, local_kld)
+                loss.backward(retain_graph=True)
                 vae_optimizer.step()

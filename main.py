@@ -18,7 +18,7 @@ def main(model):
     network = resVAE(input_size=2, hidden_size=10, latent_dim=latent_dim)
 
     model = SVAE(network)
-    model.train(data)
+    model.fit(data)
 
 
 if __name__ == "__main__":

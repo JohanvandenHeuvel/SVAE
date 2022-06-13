@@ -47,10 +47,7 @@ class resVAE(nn.Module):
         """
 
         # neural net
-        decoder = nn.Sequential(
-            nn.Linear(latent_dim, hidden_size),
-            nn.ReLU(),
-        )
+        decoder = nn.Sequential(nn.Linear(latent_dim, hidden_size), nn.ReLU(),)
         mu_dec = nn.Sequential(decoder, nn.Linear(hidden_size, input_size))
         log_var_dec = nn.Sequential(decoder, nn.Linear(hidden_size, input_size))
 
@@ -71,7 +68,7 @@ class resVAE(nn.Module):
     def decode(self, z):
         return self.mu_dec_res(z), self.log_var_dec_res(z)
 
-    def log_likelihood(self, z, x):
+    def log_likelihood(self, z, x, mu, log_var):
         """
         log-likelihood function over x
 
@@ -79,25 +76,15 @@ class resVAE(nn.Module):
         ----------
         z:
             latents
-        x:
-            observations
+        mu:
+
+        log_var:
 
         Returns
         -------
 
         """
-        mu, log_var = self.decode(z)
 
-        T, p = mu.shape
+        value = np.log(2*np.pi) + torch.sum(log_var + (x - mu)**2 / torch.exp(log_var), dim=-1)
 
-        # TODO work out if this is correct
-        value = -(T * p) / 2 * np.log(2 * np.pi) + (
-            -1 / 2 * (torch.sum(((x - mu) / torch.exp(log_var)) ** 2) + torch.sum(log_var))
-        )
-
-        return value
-
-    def forward(self, x):
-        mu, log_var = self.encode(x)
-        z = reparameterize(mu, log_var)
-        return self.decode(z), mu, log_var
+        return 1/2 * torch.mean(value)

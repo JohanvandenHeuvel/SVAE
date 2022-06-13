@@ -40,7 +40,7 @@ class Gaussian(ExpDistribution):
             log det (scale) = 2 sum log diag (L)
         where L is the lower triangular matrix produced by Cholesky decomposition of scale (psd) matrix.
         """
-        L = torch.cholesky(scale)
+        L = torch.linalg.cholesky(scale)
         value = (
                 2 * torch.sum(torch.log(torch.diagonal(L, dim1=-1, dim2=-2)), dim=-1)
                 + torch.bmm(
