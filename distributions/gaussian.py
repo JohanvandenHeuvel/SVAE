@@ -31,15 +31,24 @@ class Gaussian(ExpDistribution):
 
     def logZ(self):
         loc, scale = self.natural_to_standard()
+
+        # TODO I don't understand why there is a (a+b) in the normalization constant.
+        _, _, a, b = unpack_dense(self.nat_param)
+
+        """
+        We can do the following which is much more computationally efficient
+            log det (scale) = 2 sum log diag (L)
+        where L is the lower triangular matrix produced by Cholesky decomposition of scale (psd) matrix.
+        """
+        L = torch.cholesky(scale)
         value = (
-            -1
-            / 2
-            * (
-                torch.slogdet(scale)[1]
-                + torch.bmm(loc.unsqueeze(1), torch.bmm(torch.inverse(scale), loc[..., None])).squeeze()
-            )
+                2 * torch.sum(torch.log(torch.diagonal(L, dim1=-1, dim2=-2)), dim=-1)
+                + torch.bmm(
+            loc.unsqueeze(1), torch.bmm(torch.inverse(scale), loc[..., None])
+        ).squeeze()
+                + 2 * (a + b)
         )
-        return value
+        return 1 / 2 * torch.sum(value)
 
     def natural_to_standard(self):
         eta_2, eta_1, _, _ = unpack_dense(self.nat_param)
@@ -60,4 +69,3 @@ class Gaussian(ExpDistribution):
         eps = torch.randn_like(loc)
 
         return loc + torch.matmul(scale, torch.ones(loc.shape[1])) * eps
-
