@@ -32,6 +32,12 @@ def plot_latents(latents, eta_theta, K=15):
 
     plt.show()
 
+def plot_observations(obs):
+    x, y = zip(*obs)
+    plt.scatter(x, y)
+    plt.show()
+
+
 
 def generate_ellipse(mu, Sigma):
     t = np.hstack([np.arange(0, 2 * np.pi, 0.01), 0])

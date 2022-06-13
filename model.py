@@ -10,6 +10,10 @@ def init_weights(m):
         nn.init.normal_(m.weight, mean=0.0, std=0.001)
         nn.init.normal_(m.bias, mean=0.0, std=0.001)
 
+def init_identity(m):
+    nn.init.ones_(m.weight)
+    nn.init.ones_(m.bias)
+
 
 def reparameterize(mu, log_var):
     std = torch.exp(0.5 * log_var)
@@ -37,6 +41,9 @@ class resVAE(nn.Module):
         mu_enc_identity = nn.Linear(input_size, latent_dim)
         log_var_enc_identity = nn.Linear(input_size, latent_dim)
 
+        mu_enc_identity.apply(init_weights)
+        log_var_enc_identity.apply(init_weights)
+
         # "res net"
         self.mu_enc_res = AddModule(mu_enc, mu_enc_identity)
         self.log_var_enc_res = AddModule(log_var_enc, log_var_enc_identity)
@@ -56,6 +63,9 @@ class resVAE(nn.Module):
         # linear regression
         mu_dec_identity = nn.Linear(latent_dim, input_size)
         log_var_dec_identity = nn.Linear(latent_dim, input_size)
+
+        mu_dec_identity.apply(init_weights)
+        log_var_dec_identity.apply(init_weights)
 
         # "res net"
         self.mu_dec_res = AddModule(mu_dec, mu_dec_identity)
@@ -86,4 +96,4 @@ class resVAE(nn.Module):
 
         value = np.log(2*np.pi) + torch.sum(log_var + (x - mu)**2 / torch.exp(log_var), dim=-1)
 
-        return 1/2 * torch.mean(value)
+        return -1/2 * torch.mean(value)
