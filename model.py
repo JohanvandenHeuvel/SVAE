@@ -4,13 +4,18 @@ import torch.nn as nn
 from torch.nn import functional as F
 
 from addmodule import AddModule
-import matplotlib.pyplot as plt
+from tqdm import tqdm
+
+from plot import plot_scatter
+
+import os
 
 
 def init_weights(m):
     if isinstance(m, nn.Linear):
         nn.init.normal_(m.weight, mean=0.0, std=0.001)
         nn.init.normal_(m.bias, mean=0.0, std=0.001)
+
 
 def init_identity(m):
     nn.init.ones_(m.weight)
@@ -90,40 +95,38 @@ class resVAE(nn.Module):
 
         return loss
 
-    def log_likelihood(self, z, x, mu, log_var):
+    def log_likelihood(self, x, mu, log_var):
         """
         log-likelihood function over x
 
         Parameters
         ----------
-        z:
-            latents
         mu:
-
+            mean
         log_var:
+            log variance
 
         Returns
         -------
-
+            negative log-likelihood, i.e. -log p(x|mu, Sigma)
         """
+        var = log_var.exp()
 
-        value = np.log(2*np.pi) + torch.sum(log_var + (x - mu)**2 / torch.exp(log_var), dim=-1) # var_x = logvar_x.exp()
+        # Entries of var must be non-negative
+        if torch.any(var < 0):
+            raise ValueError("var has negative entry/entries")
 
-        # # Entries of var must be non-negative
-        # if torch.any(var_x < 0):
-        #     raise ValueError("var has negative entry/entries")
-        #
-        # # Clamp for stability
-        # var_x = var_x.clone()
-        # with torch.no_grad():
-        #     var_x.clamp_(min=1e-6)
-        #
-        # # Calculate the loss
-        # loss = 0.5 * (torch.log(var_x) + (x - mu_x) ** 2 / var_x)
-        # loss += 0.5 * np.log(2 * np.pi)
-        # loss = torch.sum(loss, dim=-1)
+        # Clamp for stability
+        var = var.clone()
+        with torch.no_grad():
+            var.clamp_(min=1e-6)
 
-        return -1/2 * torch.mean(value)
+        # Calculate the loss
+        loss = 0.5 * (torch.log(var) + (x - mu) ** 2 / var)
+        loss += 0.5 * np.log(2 * np.pi)
+        loss = torch.sum(loss, dim=-1)
+
+        return torch.mean(loss)
 
     def forward(self, x):
         mu_z, log_var_z = self.encode(x)
@@ -132,7 +135,10 @@ class resVAE(nn.Module):
         recon = reparameterize(mu_x, log_var_x)
         return recon, mu_z, log_var_z
 
-    def train(self, x_train, epochs, batch_size):
+    def train(self, x_train, save_path, epochs, batch_size):
+
+        print("Training the VAE ...")
+        os.mkdir(save_path)
 
         train_loader = torch.utils.data.DataLoader(
             x_train, batch_size=batch_size, shuffle=True
@@ -141,7 +147,7 @@ class resVAE(nn.Module):
         optimizer = torch.optim.Adam(self.parameters())
 
         train_loss = []
-        for epoch in range(epochs):
+        for epoch in tqdm(range(epochs)):
 
             total_loss = []
             for x in train_loader:
@@ -160,14 +166,16 @@ class resVAE(nn.Module):
             train_loss.append(np.mean(total_loss))
 
             if epoch % 1 == 0:
+                path = os.path.join(save_path, f"{epoch}")
+                os.mkdir(path)
 
-                # if epoch % 5 == 0:
-                #     mu, log_var = self.encode(torch.Tensor(x_train))
-                #     latents = reparameterize(mu, log_var)
-                #     latents = latents.detach().numpy()
-                #     x, y = zip(*latents)
-                #     plt.scatter(x, y)
-                #     plt.title(f'latents {epoch}')
-                #     plt.show()
+                mu, log_var = self.encode(torch.Tensor(x_train))
+                latents = reparameterize(mu, log_var)
+                latents = latents.detach().numpy()
 
-                print(f"Epoch:{epoch}/{epochs} [loss: {train_loss[epoch]:.3f}]")
+                plot_scatter(
+                    latents, title=f"vae_latents", save_path=path
+                )
+
+        print("Finished training of the VAE")
+        return train_loss

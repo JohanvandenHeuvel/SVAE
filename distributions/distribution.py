@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 import torch
 
+
 class ExpDistribution(ABC):
     def __init__(self, nat_param):
         self._nat_param = nat_param
@@ -50,7 +51,11 @@ class ExpDistribution(ABC):
 
 def exponential_kld(dist_1: ExpDistribution, dist_2: ExpDistribution):
     # TODO sometimes gives negative values
-    value = torch.flatten((dist_1.nat_param - dist_2.nat_param)) @ torch.flatten(dist_1.expected_stats()) - dist_1.logZ() + dist_2.logZ()
+    value = (
+        torch.flatten((dist_1.nat_param - dist_2.nat_param))
+        @ torch.flatten(dist_1.expected_stats())
+        - dist_1.logZ()
+        + dist_2.logZ()
+    )
     assert value >= 0
     return value
-

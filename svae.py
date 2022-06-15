@@ -1,7 +1,7 @@
 import numpy as np
 import torch
-from torch.nn import functional as F
 from torch.utils.data import DataLoader
+from tqdm import tqdm
 
 from dense import pack_dense
 from distributions import (
@@ -11,7 +11,9 @@ from distributions import (
     Categorical,
     exponential_kld,
 )
-from plot import plot_latents, plot_observations
+from plot import plot_latent
+
+import os
 
 
 def initialize_global_parameters(K, D, alpha, niw_conc=10.0, random_scale=0.0):
@@ -209,15 +211,15 @@ class SVAE:
         -------
 
         """
-        gaussian_loss = self.vae.log_likelihood(x, y, mu, log_var)
+        gaussian_loss = self.vae.log_likelihood(y, mu, log_var)
 
         kld_loss = global_kld + local_kld
 
         loss = gaussian_loss
 
-        return - loss
+        return -loss
 
-    def fit(self, obs, K=15, batch_size=500, epochs=100):
+    def fit(self, obs, save_path, K, batch_size, epochs):
         """
         Find the optimum for global variational parameter eta_theta, and encoder/decoder parameters.
 
@@ -228,9 +230,11 @@ class SVAE:
         epochs:
             Number of epochs to train.
         """
-        _, D = obs.shape
 
-        plot_observations(obs)
+        print("Training the SVAE ...")
+        os.mkdir(save_path)
+
+        _, D = obs.shape
 
         dataloader = DataLoader(obs, batch_size=batch_size, shuffle=True)
 
@@ -242,17 +246,19 @@ class SVAE:
         )
 
         vae_optimizer = torch.optim.Adam(self.vae.parameters())
-        for epoch in range(epochs):
 
-            total_loss = 0
+        train_loss = []
+        for epoch in tqdm(range(epochs)):
+
+            total_loss = []
             for i, y in enumerate(dataloader):
                 # Force scale to be positive, and it's negative inverse to be negative
                 mu, log_var = self.vae.encode(y.float())
                 scale = -torch.exp(0.5 * log_var)
                 potentials = pack_dense(scale, mu)
 
-                x = Gaussian(potentials).rsample()
-                plot_latents(x, eta_theta)
+                # x = Gaussian(potentials).rsample()
+                # plot_latent(x, eta_theta, )
 
                 """
                 Find local optimum for local variational parameter eta_x, eta_z
@@ -262,7 +268,7 @@ class SVAE:
                 )
 
                 x = Gaussian(eta_x).rsample()
-                plot_latents(x, eta_theta)
+                # plot_latents(x, eta_theta)
 
                 """
                 Update global variational parameter eta_theta using natural gradient
@@ -284,12 +290,20 @@ class SVAE:
                 recon, _ = self.vae.decode(x)
                 vae_optimizer.zero_grad()
                 loss = self.svae_objective(x, y, mu, log_var, global_kld, local_kld)
+                total_loss.append(loss.item())
                 # loss = self.vae_objective(y.float(), recon.float(), mu, log_var)
                 loss.backward()
                 vae_optimizer.step()
 
-                total_loss += loss
+            train_loss.append(np.mean(total_loss))
 
             if epoch % 10 == 0:
-                print(f"Epoch:{epoch}/{epochs} [loss: {total_loss:.3f}]")
-                plot_latents(x, eta_theta)
+                path = os.path.join(save_path, f"{epoch}")
+                os.mkdir(path)
+
+                plot_latent(
+                    x, eta_theta, K, title=f"svae_latents", save_path=path
+                )
+
+        print("Finished training of the SVAE")
+        return train_loss
