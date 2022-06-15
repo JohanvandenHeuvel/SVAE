@@ -16,7 +16,7 @@ hyperparameters = {
         "num_per_class": 100,
         "rate": 0.25,
     },
-    "SVAE_train_parameters": {"K": 15, "batch_size": 500, "epochs": 100,},
+    "SVAE_train_parameters": {"K": 15, "batch_size": 50, "epochs": 100,},
 }
 
 
@@ -44,7 +44,8 @@ def main():
     network = get_network(data, save_path=os.path.join(folder_name, "vae"))
 
     model = SVAE(network)
-    model.fit(data, save_path=os.path.join(folder_name, "svae"), **hyperparameters["SVAE_train_parameters"])
+    train_loss = model.fit(data, save_path=os.path.join(folder_name, "svae"), **hyperparameters["SVAE_train_parameters"])
+    plot_loss(train_loss, title="svae_loss", save_path=os.path.join(folder_name, "svae"))
 
 
 if __name__ == "__main__":

@@ -189,7 +189,7 @@ class SVAE:
             nat_grad(eta_theta_prior[1], eta_theta[1], stats[1]),
         )
 
-    def svae_objective(self, x, y, mu, log_var, global_kld, local_kld):
+    def svae_objective(self, y, mu, log_var, global_kld, local_kld):
         """
 
         Parameters
@@ -213,11 +213,9 @@ class SVAE:
         """
         gaussian_loss = self.vae.log_likelihood(y, mu, log_var)
 
-        kld_loss = global_kld + local_kld
+        loss = gaussian_loss - global_kld - local_kld
 
-        loss = gaussian_loss
-
-        return -loss
+        return -loss / len(y)
 
     def fit(self, obs, save_path, K, batch_size, epochs):
         """
@@ -237,6 +235,7 @@ class SVAE:
         _, D = obs.shape
 
         dataloader = DataLoader(obs, batch_size=batch_size, shuffle=True)
+        num_batches = len(dataloader)
 
         eta_theta_prior = initialize_global_parameters(
             K, D, alpha=0.05 / K, niw_conc=0.5
@@ -268,7 +267,6 @@ class SVAE:
                 )
 
                 x = Gaussian(eta_x).rsample()
-                # plot_latents(x, eta_theta)
 
                 """
                 Update global variational parameter eta_theta using natural gradient
@@ -278,8 +276,12 @@ class SVAE:
                 )
 
                 # TODO should add own version of SGD here
+                step_size = 0.1
                 eta_theta = tuple(
-                    [eta_theta[i] - nat_grad[i] for i in range(len(eta_theta))]
+                    [
+                        eta_theta[i] - step_size * nat_grad[i]
+                        for i in range(len(eta_theta))
+                    ]
                 )
 
                 """
@@ -287,11 +289,12 @@ class SVAE:
                 """
                 global_kld = prior_kld(eta_theta, eta_theta_prior)
 
-                recon, _ = self.vae.decode(x)
+                mu_y, log_var_y = self.vae.decode(x)
                 vae_optimizer.zero_grad()
-                loss = self.svae_objective(x, y, mu, log_var, global_kld, local_kld)
+                loss = self.svae_objective(
+                    y, mu_y, log_var_y, global_kld, num_batches * local_kld
+                )
                 total_loss.append(loss.item())
-                # loss = self.vae_objective(y.float(), recon.float(), mu, log_var)
                 loss.backward()
                 vae_optimizer.step()
 
@@ -301,9 +304,14 @@ class SVAE:
                 path = os.path.join(save_path, f"{epoch}")
                 os.mkdir(path)
 
-                plot_latent(
-                    x, eta_theta, K, title=f"svae_latents", save_path=path
-                )
+                mu, log_var = self.vae.encode(torch.tensor(obs).float())
+                scale = -torch.exp(0.5 * log_var)
+                potentials = pack_dense(scale, mu)
+
+                eta_x, _, _, _ = self.local_optimization(potentials, eta_theta)
+
+                x = Gaussian(eta_x).rsample()
+                plot_latent(x, eta_theta, K, title=f"svae_latents", save_path=path)
 
         print("Finished training of the SVAE")
         return train_loss

@@ -108,7 +108,7 @@ class resVAE(nn.Module):
 
         Returns
         -------
-            negative log-likelihood, i.e. -log p(x|mu, Sigma)
+            log-likelihood, i.e. -log p(x|mu, Sigma)
         """
         var = log_var.exp()
 
@@ -126,7 +126,7 @@ class resVAE(nn.Module):
         loss += 0.5 * np.log(2 * np.pi)
         loss = torch.sum(loss, dim=-1)
 
-        return torch.mean(loss)
+        return -torch.sum(loss)
 
     def forward(self, x):
         mu_z, log_var_z = self.encode(x)
