@@ -10,7 +10,7 @@ class Categorical(ExpDistribution):
         super().__init__(nat_param)
 
     def expected_stats(self):
-        return F.softmax(self.nat_param)
+        return F.softmax(self.nat_param, dim=-1)
 
     def logZ(self):
         return torch.sum(torch.logsumexp(self.nat_param, dim=-1))

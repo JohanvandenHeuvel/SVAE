@@ -213,38 +213,11 @@ class SVAE:
 
         kld_loss = global_kld + local_kld
 
-        loss = gaussian_loss - kld_loss
+        loss = gaussian_loss
 
-        return loss
+        return - loss
 
-    def vae_objective(self, y, recon, mu, log_var):
-        """
-
-        Parameters
-        ----------
-        y:
-            observation
-        recon:
-            reconstruction
-        mu:
-            latent mu
-        log_var:
-            latent log_var
-
-        Returns
-        -------
-
-        """
-        kld_loss = torch.mean(
-            -0.5 * torch.sum(1 + log_var - mu ** 2 - log_var.exp(), dim=1), dim=0
-        )
-        recon_loss = F.mse_loss(recon, y)
-
-        loss = recon_loss + 5.0 * kld_loss
-
-        return loss
-
-    def fit(self, obs, K=15, batch_size=64, epochs=100):
+    def fit(self, obs, K=15, batch_size=500, epochs=100):
         """
         Find the optimum for global variational parameter eta_theta, and encoder/decoder parameters.
 
@@ -259,7 +232,7 @@ class SVAE:
 
         plot_observations(obs)
 
-        dataloader = DataLoader(obs, batch_size=500, shuffle=True)
+        dataloader = DataLoader(obs, batch_size=batch_size, shuffle=True)
 
         eta_theta_prior = initialize_global_parameters(
             K, D, alpha=0.05 / K, niw_conc=0.5
@@ -273,13 +246,13 @@ class SVAE:
 
             total_loss = 0
             for i, y in enumerate(dataloader):
-                print(i)
                 # Force scale to be positive, and it's negative inverse to be negative
                 mu, log_var = self.vae.encode(y.float())
                 scale = -torch.exp(0.5 * log_var)
                 potentials = pack_dense(scale, mu)
 
-                # x = Gaussian(potentials).rsample()
+                x = Gaussian(potentials).rsample()
+                plot_latents(x, eta_theta)
 
                 """
                 Find local optimum for local variational parameter eta_x, eta_z
@@ -317,6 +290,6 @@ class SVAE:
 
                 total_loss += loss
 
-            print(f"Epoch:{epoch}/{epochs} [loss: {total_loss:.3f}]")
-            if epoch % 5 == 0:
+            if epoch % 10 == 0:
+                print(f"Epoch:{epoch}/{epochs} [loss: {total_loss:.3f}]")
                 plot_latents(x, eta_theta)
