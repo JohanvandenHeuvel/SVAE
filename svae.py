@@ -237,7 +237,7 @@ class SVAE:
 
     def loss_function(self, y, recon, kld):
         recon_loss = F.mse_loss(recon, y)
-        return recon_loss
+        return recon_loss + kld
 
 
     def fit(self, obs, save_path, K, batch_size, epochs):
@@ -314,7 +314,7 @@ class SVAE:
                 # loss = self.svae_objective(
                 #     y, mu_y, log_var_y, global_kld, num_batches * local_kld
                 # )
-                loss = self.loss_function(y, recon, local_kld / num_batches)
+                loss = self.loss_function(y, recon, local_kld * 0.05)
                 # print(f"total:{total_loss}, ({recon_loss}, {local_kld / num_batches})")
                 total_loss.append(loss.item())
                 loss.backward()

@@ -71,6 +71,20 @@ def _plot_latent(ax, latents, eta_theta, K=15, title=None):
     ax.set_title(title)
 
 
+def plot_reconstruction(data, recon, title=None, save_path=None):
+    fig, ax = plt.subplots()
+    _plot_scatter(ax, data, title)
+    _plot_scatter(ax, recon, title)
+
+    if save_path is not None:
+        if title is None:
+            raise ValueError(f"saving requires title but title is {title}")
+        fig.savefig(os.path.join(save_path, title))
+        plt.close(fig)
+    else:
+        plt.plot()
+
+
 def plot_scatter(data, title=None, save_path=None):
     """
     Make scatter plot for data of the form [(x1, y1), ..., (xi, yi), ...]

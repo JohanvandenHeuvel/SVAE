@@ -8,7 +8,7 @@ import os
 
 hyperparameters = {
     "resVAE_parameters": {"latent_dim": 2, "input_size": 2, "hidden_size": 50,},
-    "resVAE_train_parameters": {"epochs": 50, "batch_size": 32,},
+    "resVAE_train_parameters": {"epochs": 100, "batch_size": 32,},
     "pinwheel_data_parameters": {
         "radial_std": 0.3,
         "tangential_std": 0.05,
@@ -43,9 +43,9 @@ def main():
     plot_scatter(data, title="observations", save_path=folder_name)
     network = get_network(data, save_path=os.path.join(folder_name, "vae"))
 
-    model = SVAE(network)
-    train_loss = model.fit(data, save_path=os.path.join(folder_name, "svae"), **hyperparameters["SVAE_train_parameters"])
-    plot_loss(train_loss, title="svae_loss", save_path=os.path.join(folder_name, "svae"))
+    # model = SVAE(network)
+    # train_loss = model.fit(data, save_path=os.path.join(folder_name, "svae"), **hyperparameters["SVAE_train_parameters"])
+    # plot_loss(train_loss, title="svae_loss", save_path=os.path.join(folder_name, "svae"))
 
 
 if __name__ == "__main__":

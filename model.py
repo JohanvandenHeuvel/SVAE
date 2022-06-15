@@ -6,7 +6,7 @@ from torch.nn import functional as F
 from addmodule import AddModule
 from tqdm import tqdm
 
-from plot import plot_scatter
+from plot import plot_scatter, plot_reconstruction
 
 import os
 
@@ -52,8 +52,10 @@ class resVAE(nn.Module):
         log_var_enc_identity.apply(init_weights)
 
         # "res net"
-        self.mu_enc_res = AddModule(mu_enc, mu_enc_identity)
-        self.log_var_enc_res = AddModule(log_var_enc, log_var_enc_identity)
+        # self.mu_enc_res = AddModule(mu_enc, mu_enc_identity)
+        self.mu_enc_res = mu_enc
+        # self.log_var_enc_res = AddModule(log_var_enc, log_var_enc_identity)
+        self.log_var_enc_res = log_var_enc
 
         """
         DECODER 
@@ -75,8 +77,10 @@ class resVAE(nn.Module):
         log_var_dec_identity.apply(init_weights)
 
         # "res net"
-        self.mu_dec_res = AddModule(mu_dec, mu_dec_identity)
-        self.log_var_dec_res = AddModule(log_var_dec, log_var_dec_identity)
+        # self.mu_dec_res = AddModule(mu_dec, mu_dec_identity)
+        self.mu_dec_res = mu_dec
+        # self.log_var_dec_res = AddModule(log_var_dec, log_var_dec_identity)
+        self.log_var_dec_res = log_var_dec
 
     def encode(self, x):
         return self.mu_enc_res(x), self.log_var_enc_res(x)
@@ -84,12 +88,11 @@ class resVAE(nn.Module):
     def decode(self, z):
         return self.mu_dec_res(z), self.log_var_dec_res(z)
 
-    def loss_function(self, x, recon, mu, log_var, kld_weight=0.5):
+    def loss_function(self, recon_loss, mu, log_var, kld_weight=0.5):
 
         kld_loss = torch.mean(
             -0.5 * torch.sum(1 + log_var - mu ** 2 - log_var.exp(), dim=1), dim=0
         )
-        recon_loss = F.mse_loss(recon, x)
 
         loss = recon_loss + kld_weight * kld_loss
 
@@ -126,14 +129,14 @@ class resVAE(nn.Module):
         loss += 0.5 * np.log(2 * np.pi)
         loss = torch.sum(loss, dim=-1)
 
-        return -torch.sum(loss)
+        return torch.mean(loss)
 
     def forward(self, x):
         mu_z, log_var_z = self.encode(x)
         z = reparameterize(mu_z, log_var_z)
         mu_x, log_var_x = self.decode(z)
-        recon = reparameterize(mu_x, log_var_x)
-        return recon, mu_z, log_var_z
+        # recon = reparameterize(mu_x, log_var_x)
+        return mu_x, log_var_x, mu_z, log_var_z
 
     def train(self, x_train, save_path, epochs, batch_size):
 
@@ -144,7 +147,8 @@ class resVAE(nn.Module):
             x_train, batch_size=batch_size, shuffle=True
         )
 
-        optimizer = torch.optim.Adam(self.parameters())
+        criterion = torch.nn.GaussianNLLLoss(full=True)
+        optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
 
         train_loss = []
         for epoch in tqdm(range(epochs)):
@@ -152,9 +156,15 @@ class resVAE(nn.Module):
             total_loss = []
             for x in train_loader:
 
-                recon, mu, log_var = self.forward(x.float())
+                mu_x, log_var_x, mu_z, log_var_z = self.forward(x.float())
 
-                loss = self.loss_function(x.float(), recon, mu, log_var)
+                # recon_loss = F.mse_loss(recon, x.float())
+                # recon_loss = self.log_likelihood(x, mu_x, log_var_x)
+                # loss = self.loss_function(recon_loss, mu_z, log_var_z)
+                kld_loss = torch.mean(
+                    -0.5 * torch.sum(1 + log_var_z - mu_z ** 2 - log_var_z.exp(), dim=1), dim=0
+                )
+                loss = criterion(x, mu_x, log_var_x.exp()) + kld_loss
                 total_loss.append(loss.item())
 
                 optimizer.zero_grad()
@@ -165,7 +175,7 @@ class resVAE(nn.Module):
 
             train_loss.append(np.mean(total_loss))
 
-            if epoch % 1 == 0:
+            if epoch % 10 == 0:
                 path = os.path.join(save_path, f"{epoch}")
                 os.mkdir(path)
 
@@ -176,6 +186,10 @@ class resVAE(nn.Module):
                 plot_scatter(
                     latents, title=f"vae_latents", save_path=path
                 )
+
+                mu_x, _, _, _ = self.forward(torch.Tensor(x_train))
+                plot_reconstruction(x_train, mu_x.detach().numpy(), title=f"vae_recon", save_path=path)
+
 
         print("Finished training of the VAE")
         return train_loss
