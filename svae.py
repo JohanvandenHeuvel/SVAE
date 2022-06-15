@@ -1,9 +1,10 @@
 import numpy as np
 import torch
+from torch.nn import functional as F
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from dense import pack_dense
+from dense import pack_dense, unpack_dense
 from distributions import (
     Gaussian,
     NormalInverseWishart,
@@ -11,7 +12,7 @@ from distributions import (
     Categorical,
     exponential_kld,
 )
-from plot import plot_latent
+from plot import plot_latent, plot_scatter
 
 import os
 
@@ -41,14 +42,15 @@ def initialize_global_parameters(K, D, alpha, niw_conc=10.0, random_scale=0.0):
             np.zeros(N),
             niw_conc,
         )
-        m = m + random_scale * np.random.rand(*m.shape)
+        m = m + random_scale * np.random.randn(*m.shape)
 
         nu = torch.Tensor([nu]).unsqueeze(0)
         S = torch.Tensor(S).unsqueeze(0)
         m = torch.Tensor(m).unsqueeze(0)
         kappa = torch.Tensor([kappa]).unsqueeze(0)
 
-        return NormalInverseWishart(None).standard_to_natural(kappa, m, S, nu)
+        nat_param = NormalInverseWishart(None).standard_to_natural(kappa, m, S, nu)
+        return nat_param
 
     dirichlet_natural_parameters = alpha * (
         torch.rand(K) if random_scale else torch.ones(K)
@@ -90,7 +92,7 @@ class SVAE:
     def __init__(self, vae):
         self.vae = vae
 
-    def local_optimization(self, potentials, eta_theta, epochs=20):
+    def local_optimization(self, potentials, eta_theta, epochs=100):
         """
         Find the optimum for local variational parameters eta_x, eta_z
 
@@ -114,6 +116,7 @@ class SVAE:
         """
         optimize local variational parameters
         """
+        kl = np.inf
         label_stats = initialize_meanfield(label_parameters, potentials)
         for i in range(epochs):
             """
@@ -124,6 +127,9 @@ class SVAE:
             )
             eta_x = gaussian_potentials + potentials
             gaussian_stats = Gaussian(eta_x).expected_stats()
+            gaussian_kld = (
+                torch.tensordot(potentials, gaussian_stats, 3) - Gaussian(eta_x).logZ()
+            )
 
             """
             Label z
@@ -133,27 +139,36 @@ class SVAE:
             )
             eta_z = label_potentials + label_parameters
             label_stats = Categorical(eta_z).expected_stats()
+            label_kld = (
+                torch.tensordot(label_stats, label_potentials)
+                - Categorical(eta_z).logZ()
+            )
 
-        # label_stats = label_stats.detach()
-        # gaussian_potentials = torch.tensordot(
-        #     label_stats, gaussian_parameters, [[1], [0]]
-        # )
-        # eta_x = gaussian_potentials + potentials
-        # gaussian_stats = Gaussian(eta_x).expected_stats()
-        #
-        # label_potentials = torch.tensordot(
-        #     gaussian_stats, gaussian_parameters, [[1, 2], [1, 2]]
-        # )
-        # eta_z = label_potentials + label_parameters
-        """
-        KL-Divergence
-        """
-        label_kld = (
-            torch.tensordot(label_stats, label_potentials) - Categorical(eta_z).logZ()
+            kl, prev_l = label_kld + gaussian_kld, kl
+            if abs(kl - prev_l) < 1e-3:
+                break
+        else:
+            print("iteration limit reached")
+
+        gaussian_potentials = torch.tensordot(
+            label_stats, gaussian_parameters, [[1], [0]]
         )
+        eta_x = gaussian_potentials + potentials
+        gaussian_stats = Gaussian(eta_x).expected_stats()
         gaussian_kld = (
             torch.tensordot(potentials, gaussian_stats, 3) - Gaussian(eta_x).logZ()
         )
+
+        label_potentials = torch.tensordot(
+            gaussian_stats, gaussian_parameters, [[1, 2], [1, 2]]
+        )
+        eta_z = label_potentials + label_parameters
+        label_kld = (
+            torch.tensordot(label_stats, label_potentials) - Categorical(eta_z).logZ()
+        )
+        """
+        KL-Divergence
+        """
         local_kld = label_kld + gaussian_kld
 
         """
@@ -165,7 +180,9 @@ class SVAE:
 
         return eta_x, eta_z, prior_stats, local_kld
 
-    def natural_gradient(self, stats, eta_theta, eta_theta_prior, D, scale=1.0):
+    def natural_gradient(
+        self, stats, eta_theta, eta_theta_prior, N, num_batches, scale=10000.0
+    ):
         """
         Natural gradient for the global variational parameters eta_theta
 
@@ -176,18 +193,19 @@ class SVAE:
         eta_theta:
             Natural parameters for global variables.
         D: int
-            Number of dimensions.
+            Number of datapoints.
         scale: float
             Loss weight
         """
 
         def nat_grad(prior, post, s):
-            return -scale / D * (prior - post + D * s)
+            return -scale / N * (prior - post + num_batches * s)
 
-        return (
+        value = (
             nat_grad(eta_theta_prior[0], eta_theta[0], stats[0]),
             nat_grad(eta_theta_prior[1], eta_theta[1], stats[1]),
         )
+        return value
 
     def svae_objective(self, y, mu, log_var, global_kld, local_kld):
         """
@@ -216,6 +234,11 @@ class SVAE:
         loss = gaussian_loss - global_kld - local_kld
 
         return -loss / len(y)
+
+    def loss_function(self, y, recon, kld):
+        recon_loss = F.mse_loss(recon, y)
+        return recon_loss
+
 
     def fit(self, obs, save_path, K, batch_size, epochs):
         """
@@ -251,13 +274,11 @@ class SVAE:
 
             total_loss = []
             for i, y in enumerate(dataloader):
+                y = y.float()
                 # Force scale to be positive, and it's negative inverse to be negative
-                mu, log_var = self.vae.encode(y.float())
+                mu, log_var = self.vae.encode(y)
                 scale = -torch.exp(0.5 * log_var)
                 potentials = pack_dense(scale, mu)
-
-                # x = Gaussian(potentials).rsample()
-                # plot_latent(x, eta_theta, )
 
                 """
                 Find local optimum for local variational parameter eta_x, eta_z
@@ -272,11 +293,10 @@ class SVAE:
                 Update global variational parameter eta_theta using natural gradient
                 """
                 nat_grad = self.natural_gradient(
-                    prior_stats, eta_theta, eta_theta_prior, D
+                    prior_stats, eta_theta, eta_theta_prior, len(obs), num_batches
                 )
 
-                # TODO should add own version of SGD here
-                step_size = 0.1
+                step_size = 1e-4
                 eta_theta = tuple(
                     [
                         eta_theta[i] - step_size * nat_grad[i]
@@ -289,11 +309,13 @@ class SVAE:
                 """
                 global_kld = prior_kld(eta_theta, eta_theta_prior)
 
-                mu_y, log_var_y = self.vae.decode(x)
+                recon, _ = self.vae.decode(x)
                 vae_optimizer.zero_grad()
-                loss = self.svae_objective(
-                    y, mu_y, log_var_y, global_kld, num_batches * local_kld
-                )
+                # loss = self.svae_objective(
+                #     y, mu_y, log_var_y, global_kld, num_batches * local_kld
+                # )
+                loss = self.loss_function(y, recon, local_kld / num_batches)
+                # print(f"total:{total_loss}, ({recon_loss}, {local_kld / num_batches})")
                 total_loss.append(loss.item())
                 loss.backward()
                 vae_optimizer.step()
@@ -311,7 +333,14 @@ class SVAE:
                 eta_x, _, _, _ = self.local_optimization(potentials, eta_theta)
 
                 x = Gaussian(eta_x).rsample()
-                plot_latent(x, eta_theta, K, title=f"svae_latents", save_path=path)
+                mu_y, log_var_y = self.vae.decode(x)
+                plot_scatter(
+                    mu_y.detach().numpy(), title="reconstruction", save_path=path
+                )
+
+                gaussian_stats = Gaussian(eta_x).expected_stats()
+                _, Ex, _, _ = unpack_dense(gaussian_stats)
+                plot_latent(Ex, eta_theta, K, title=f"svae_latents", save_path=path)
 
         print("Finished training of the SVAE")
         return train_loss

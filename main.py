@@ -8,7 +8,7 @@ import os
 
 hyperparameters = {
     "resVAE_parameters": {"latent_dim": 2, "input_size": 2, "hidden_size": 50,},
-    "resVAE_train_parameters": {"epochs": 100, "batch_size": 32,},
+    "resVAE_train_parameters": {"epochs": 50, "batch_size": 32,},
     "pinwheel_data_parameters": {
         "radial_std": 0.3,
         "tangential_std": 0.05,
@@ -16,7 +16,7 @@ hyperparameters = {
         "num_per_class": 100,
         "rate": 0.25,
     },
-    "SVAE_train_parameters": {"K": 15, "batch_size": 50, "epochs": 100,},
+    "SVAE_train_parameters": {"K": 15, "batch_size": 50, "epochs": 500,},
 }
 
 

@@ -21,6 +21,7 @@ def plot_latent(latents, eta_theta, K, title=None, save_path=None):
         if title is None:
             raise ValueError(f"saving requires title but title is {title}")
         fig.savefig(os.path.join(save_path, title))
+        plt.close(fig)
     else:
         plt.plot()
 
@@ -36,7 +37,9 @@ def _plot_latent(ax, latents, eta_theta, K=15, title=None):
         """
         neghalfJ, h, _, _ = unpack_dense(niw_param)
         J = -2 * neghalfJ
-        return torch.linalg.solve(J, h), torch.inverse(J)
+        mu = torch.linalg.solve(J, h)
+        Sigma = torch.inverse(J)
+        return mu, Sigma
 
     def normalize(arr):
         """
@@ -92,6 +95,7 @@ def _plot_scatter(ax, data, title=None):
     ax.scatter(x, y)
     ax.set_title(title)
 
+
 def plot_loss(loss, title=None, save_path=None):
 
     fig, ax = plt.subplots()
@@ -113,7 +117,8 @@ def generate_ellipse(mu, Sigma):
     """
     Generate ellipse from a (mu, Sigma)
     """
-    t = np.hstack([np.arange(0, 2 * np.pi, 0.01), 0])
-    circle = np.vstack([np.sin(t), np.cos(t)])
+    # t = np.hstack([np.arange(0, 2 * np.pi, 0.01), 0])
+    t = np.linspace(0, 2 * np.pi, 100) % 2 * np.pi
+    circle = np.vstack((np.sin(t), np.cos(t)))
     ellipse = 2.0 * np.dot(np.linalg.cholesky(Sigma), circle)
     return ellipse[0] + mu[0], ellipse[1] + mu[1]

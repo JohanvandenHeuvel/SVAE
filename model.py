@@ -84,7 +84,7 @@ class resVAE(nn.Module):
     def decode(self, z):
         return self.mu_dec_res(z), self.log_var_dec_res(z)
 
-    def loss_function(self, x, recon, mu, log_var, kld_weight=1.0):
+    def loss_function(self, x, recon, mu, log_var, kld_weight=0.5):
 
         kld_loss = torch.mean(
             -0.5 * torch.sum(1 + log_var - mu ** 2 - log_var.exp(), dim=1), dim=0
