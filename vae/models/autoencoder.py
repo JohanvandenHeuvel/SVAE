@@ -42,7 +42,7 @@ class Autoencoder(nn.Module):
         )
         return value
 
-    def fit(self, obs, epochs, batch_size, save_path=None):
+    def fit(self, obs, epochs, batch_size, kld_weight, save_path=None):
         if save_path is not None:
             os.mkdir(save_path)
 
@@ -66,7 +66,7 @@ class Autoencoder(nn.Module):
 
                 kld_loss = self.kld(mu_z, log_var_z)
                 recon_loss = self.loss_function(obs_batch, mu_x, log_var_x)
-                loss = recon_loss + 1.0 * kld_loss
+                loss = recon_loss + kld_weight * kld_loss
 
                 optimizer.zero_grad()
                 # compute gradients

@@ -11,9 +11,9 @@ def init_weights(m):
 
 
 class resVAE(VAE):
-    def __init__(self, input_size, hidden_size, latent_dim):
+    def __init__(self, input_size, hidden_size, latent_dim, recon_loss="MSE"):
 
-        super().__init__(input_size, hidden_size, latent_dim)
+        super().__init__(input_size, hidden_size, latent_dim, recon_loss)
 
         """
         ENCODER

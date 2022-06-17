@@ -10,9 +10,10 @@ from plot.plot import plot_reconstruction
 
 
 class VAE(Autoencoder):
-    def __init__(self, input_size, hidden_size, latent_dim):
+    def __init__(self, input_size, hidden_size, latent_dim, recon_loss="MSE"):
 
         super(VAE, self).__init__()
+        self.recon_loss = recon_loss
 
         """
         ENCODER
@@ -41,7 +42,10 @@ class VAE(Autoencoder):
         return mu_x, log_var_x, mu_z, log_var_z
 
     def loss_function(self, x, mu_x, log_var_x):
-        recon_loss = F.mse_loss(mu_x, x)
+        if self.recon_loss == "MSE":
+            recon_loss = F.mse_loss(mu_x, x)
+        elif self.recon_loss == "likelihood":
+            recon_loss = F.gaussian_nll_loss(mu_x, x, log_var_x.exp())
         return recon_loss
 
     def save_and_log(self, obs, epoch, save_path):
