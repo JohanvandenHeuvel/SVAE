@@ -6,7 +6,7 @@ from torch.nn import functional as F
 
 from .autoencoder import Autoencoder
 
-from plot import plot_scatter, plot_reconstruction
+from plot.plot import plot_reconstruction
 
 
 class VAE(Autoencoder):
@@ -17,14 +17,14 @@ class VAE(Autoencoder):
         """
         ENCODER
         """
-        encoder = nn.Sequential(nn.Linear(input_size, hidden_size), nn.ReLU())
+        encoder = nn.Sequential(nn.Linear(input_size, hidden_size), nn.Tanh())
         self.mu_enc = nn.Sequential(encoder, nn.Linear(hidden_size, latent_dim))
         self.log_var_enc = nn.Sequential(encoder, nn.Linear(hidden_size, latent_dim))
 
         """
         DECODER
         """
-        decoder = nn.Sequential(nn.Linear(latent_dim, hidden_size), nn.ReLU())
+        decoder = nn.Sequential(nn.Linear(latent_dim, hidden_size), nn.Tanh())
         self.mu_dec = nn.Sequential(decoder, nn.Linear(hidden_size, input_size))
         self.log_var_dec = nn.Sequential(decoder, nn.Linear(hidden_size, input_size))
 
@@ -51,10 +51,12 @@ class VAE(Autoencoder):
     def save_and_log(self, obs, epoch, save_path):
         mu_z, log_var_z = self.encode(torch.Tensor(obs))
         z = self.reparameterize(mu_z, log_var_z)
-        z = z.detach().numpy()
-        plot_scatter(z, title=f"{epoch}_vae_latents", save_path=save_path)
 
         mu_x, _, _, _ = self.forward(torch.Tensor(obs))
         plot_reconstruction(
-            obs, mu_x.detach().numpy(), title=f"{epoch}_vae_recon", save_path=save_path
+            obs,
+            mu_x.detach().numpy(),
+            z.detach().numpy(),
+            title=f"{epoch}_vae_recon",
+            save_path=save_path,
         )

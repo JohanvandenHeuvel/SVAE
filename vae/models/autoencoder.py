@@ -36,8 +36,9 @@ class Autoencoder(nn.Module):
         eps = torch.randn_like(std)
         return eps * std + mu
 
-    def fit(self, obs, epochs, batch_size, save_path, save_every_epoch=10):
-        os.mkdir(save_path)
+    def fit(self, obs, epochs, batch_size, save_path=None, save_every_epoch=10):
+        if save_path is not None:
+            os.mkdir(save_path)
 
         # Make data object
         train_loader = torch.utils.data.DataLoader(

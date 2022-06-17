@@ -9,10 +9,13 @@ import os
 from distributions import Dirichlet, NormalInverseWishart
 
 
-def plot_reconstruction(data, recon, title=None, save_path=None):
-    fig, ax = plt.subplots()
-    _plot_scatter(ax, data, title)
-    _plot_scatter(ax, recon, title)
+def plot_reconstruction(data, recon, latent, eta_theta=None, title=None, save_path=None):
+    fig, (ax1, ax2) = plt.subplots(1, 2)
+    _plot_scatter(ax1, latent, title="latents")
+    if eta_theta is not None:
+        _plot_clusters(ax1, eta_theta)
+    _plot_scatter(ax2, data)
+    _plot_scatter(ax2, recon, title="reconstruction")
 
     if save_path is not None:
         if title is None:
@@ -21,35 +24,9 @@ def plot_reconstruction(data, recon, title=None, save_path=None):
         plt.close(fig)
     else:
         plt.plot()
-
-
-def plot_scatter(data, title=None, save_path=None):
-    """
-    Make scatter plot for data of the form [(x1, y1), ..., (xi, yi), ...]
-    """
-    fig, ax = plt.subplots()
-    _plot_scatter(ax, data, title)
-
-    if save_path is not None:
-        if title is None:
-            raise ValueError(f"saving requires title but title is {title}")
-        fig.savefig(os.path.join(save_path, title))
-        plt.close(fig)
-    else:
-        plt.plot()
-
-
-def _plot_scatter(ax, data, title=None):
-    """
-    Make scatter plot for data of the form [(x1, y1), ..., (xi, yi), ...]
-    """
-    x, y = zip(*data)
-    ax.scatter(x, y)
-    ax.set_title(title)
 
 
 def plot_loss(loss, title=None, save_path=None):
-
     fig, ax = plt.subplots()
     ax.plot(loss)
     ax.set_title(title)
@@ -65,27 +42,20 @@ def plot_loss(loss, title=None, save_path=None):
         plt.plot()
 
 
-def plot_latent(latents, eta_theta, K, title=None, save_path=None):
+def _plot_clusters(ax, eta_theta, K=15, title=None):
     """
     Plot latent dimension, including clusters, of the SVAE
     """
 
-    fig, ax = plt.subplots()
-    _plot_latent(ax, latents, eta_theta, K)
-
-    if save_path is not None:
-        if title is None:
-            raise ValueError(f"saving requires title but title is {title}")
-        fig.savefig(os.path.join(save_path, title))
-        plt.close(fig)
-    else:
-        plt.plot()
-
-
-def _plot_latent(ax, latents, eta_theta, K=15, title=None):
-    """
-    Plot latent dimension, including clusters, of the SVAE
-    """
+    def generate_ellipse(mu, Sigma):
+        """
+        Generate ellipse from a (mu, Sigma)
+        """
+        # t = np.hstack([np.arange(0, 2 * np.pi, 0.01), 0])
+        t = np.linspace(0, 2 * np.pi, 100) % 2 * np.pi
+        circle = np.vstack((np.sin(t), np.cos(t)))
+        ellipse = 2.0 * np.dot(np.linalg.cholesky(Sigma), circle)
+        return ellipse[0] + mu[0], ellipse[1] + mu[1]
 
     def get_component(niw_param):
         """
@@ -112,12 +82,6 @@ def _plot_latent(ax, latents, eta_theta, K=15, title=None):
     components = map(get_component, NormalInverseWishart(niw_param).expected_stats())
 
     """
-    plot latent data-points
-    """
-    x, y = zip(*latents.detach().numpy())
-    ax.scatter(x, y)
-
-    """
     plot latent clusters
     """
     for weight, (mu, Sigma) in zip(weights, components):
@@ -127,12 +91,13 @@ def _plot_latent(ax, latents, eta_theta, K=15, title=None):
     ax.set_title(title)
 
 
-def generate_ellipse(mu, Sigma):
+def _plot_scatter(ax, data, title=None):
     """
-    Generate ellipse from a (mu, Sigma)
+    Make scatter plot for data of the form [(x1, y1), ..., (xi, yi), ...]
     """
-    # t = np.hstack([np.arange(0, 2 * np.pi, 0.01), 0])
-    t = np.linspace(0, 2 * np.pi, 100) % 2 * np.pi
-    circle = np.vstack((np.sin(t), np.cos(t)))
-    ellipse = 2.0 * np.dot(np.linalg.cholesky(Sigma), circle)
-    return ellipse[0] + mu[0], ellipse[1] + mu[1]
+    x, y = zip(*data)
+    ax.scatter(x, y)
+    ax.set_title(title)
+
+
+

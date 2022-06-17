@@ -239,7 +239,6 @@ class SVAE:
         recon_loss = F.mse_loss(recon, y)
         return recon_loss + kld
 
-
     def fit(self, obs, save_path, K, batch_size, epochs):
         """
         Find the optimum for global variational parameter eta_theta, and encoder/decoder parameters.
