@@ -9,6 +9,62 @@ import os
 from distributions import Dirichlet, NormalInverseWishart
 
 
+def plot_reconstruction(data, recon, title=None, save_path=None):
+    fig, ax = plt.subplots()
+    _plot_scatter(ax, data, title)
+    _plot_scatter(ax, recon, title)
+
+    if save_path is not None:
+        if title is None:
+            raise ValueError(f"saving requires title but title is {title}")
+        fig.savefig(os.path.join(save_path, title))
+        plt.close(fig)
+    else:
+        plt.plot()
+
+
+def plot_scatter(data, title=None, save_path=None):
+    """
+    Make scatter plot for data of the form [(x1, y1), ..., (xi, yi), ...]
+    """
+    fig, ax = plt.subplots()
+    _plot_scatter(ax, data, title)
+
+    if save_path is not None:
+        if title is None:
+            raise ValueError(f"saving requires title but title is {title}")
+        fig.savefig(os.path.join(save_path, title))
+        plt.close(fig)
+    else:
+        plt.plot()
+
+
+def _plot_scatter(ax, data, title=None):
+    """
+    Make scatter plot for data of the form [(x1, y1), ..., (xi, yi), ...]
+    """
+    x, y = zip(*data)
+    ax.scatter(x, y)
+    ax.set_title(title)
+
+
+def plot_loss(loss, title=None, save_path=None):
+
+    fig, ax = plt.subplots()
+    ax.plot(loss)
+    ax.set_title(title)
+    ax.set_xlabel("epochs")
+    ax.set_ylabel("loss")
+
+    if save_path is not None:
+        if title is None:
+            raise ValueError(f"saving requires title but title is {title}")
+        fig.savefig(os.path.join(save_path, title))
+        plt.close(fig)
+    else:
+        plt.plot()
+
+
 def plot_latent(latents, eta_theta, K, title=None, save_path=None):
     """
     Plot latent dimension, including clusters, of the SVAE
@@ -69,62 +125,6 @@ def _plot_latent(ax, latents, eta_theta, K=15, title=None):
         ax.plot(x, y, alpha=weight, linestyle="-", linewidth=3)
 
     ax.set_title(title)
-
-
-def plot_reconstruction(data, recon, title=None, save_path=None):
-    fig, ax = plt.subplots()
-    _plot_scatter(ax, data, title)
-    _plot_scatter(ax, recon, title)
-
-    if save_path is not None:
-        if title is None:
-            raise ValueError(f"saving requires title but title is {title}")
-        fig.savefig(os.path.join(save_path, title))
-        plt.close(fig)
-    else:
-        plt.plot()
-
-
-def plot_scatter(data, title=None, save_path=None):
-    """
-    Make scatter plot for data of the form [(x1, y1), ..., (xi, yi), ...]
-    """
-    fig, ax = plt.subplots()
-    _plot_scatter(ax, data, title)
-
-    if save_path is not None:
-        if title is None:
-            raise ValueError(f"saving requires title but title is {title}")
-        fig.savefig(os.path.join(save_path, title))
-        plt.close(fig)
-    else:
-        plt.plot()
-
-
-def _plot_scatter(ax, data, title=None):
-    """
-    Make scatter plot for data of the form [(x1, y1), ..., (xi, yi), ...]
-    """
-    x, y = zip(*data)
-    ax.scatter(x, y)
-    ax.set_title(title)
-
-
-def plot_loss(loss, title=None, save_path=None):
-
-    fig, ax = plt.subplots()
-    ax.plot(loss)
-    ax.set_title(title)
-    ax.set_xlabel("epochs")
-    ax.set_ylabel("loss")
-
-    if save_path is not None:
-        if title is None:
-            raise ValueError(f"saving requires title but title is {title}")
-        fig.savefig(os.path.join(save_path, title))
-        plt.close(fig)
-    else:
-        plt.plot()
 
 
 def generate_ellipse(mu, Sigma):

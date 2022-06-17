@@ -1,12 +1,14 @@
 # for logging
+import json
 import os
 import time
-import json
+
 
 def make_folder():
     timestr = time.strftime("date:%m_%d-time:%H_%M_%S")
-    os.mkdir(timestr)
-    return timestr
+    path = os.path.join("results", timestr)
+    os.makedirs(path)
+    return path
 
 
 def save_dict(d, save_path, name):

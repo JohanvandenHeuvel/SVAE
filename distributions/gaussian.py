@@ -1,8 +1,43 @@
 import torch
+import numpy as np
 
 from .distribution import ExpDistribution
 
 from dense import pack_dense, unpack_dense
+
+
+def log_likelihood(x, mu, log_var):
+    """
+    log-likelihood function over x
+
+    Parameters
+    ----------
+    mu:
+        mean
+    log_var:
+        log variance
+
+    Returns
+    -------
+        log-likelihood, i.e. -log p(x|mu, Sigma)
+    """
+    var = log_var.exp()
+
+    # Entries of var must be non-negative
+    if torch.any(var < 0):
+        raise ValueError("var has negative entry/entries")
+
+    # Clamp for stability
+    var = var.clone()
+    with torch.no_grad():
+        var.clamp_(min=1e-6)
+
+    # Calculate the loss
+    loss = 0.5 * (torch.log(var) + (x - mu) ** 2 / var)
+    loss += 0.5 * np.log(2 * np.pi)
+    loss = torch.sum(loss, dim=-1)
+
+    return torch.mean(loss)
 
 
 class Gaussian(ExpDistribution):
@@ -42,11 +77,11 @@ class Gaussian(ExpDistribution):
         """
         L = torch.linalg.cholesky(scale)
         value = (
-                2 * torch.sum(torch.log(torch.diagonal(L, dim1=-1, dim2=-2)), dim=-1)
-                + torch.bmm(
-            loc.unsqueeze(1), torch.bmm(torch.inverse(scale), loc[..., None])
-        ).squeeze()
-                + 2 * (a + b)
+            2 * torch.sum(torch.log(torch.diagonal(L, dim1=-1, dim2=-2)), dim=-1)
+            + torch.bmm(
+                loc.unsqueeze(1), torch.bmm(torch.inverse(scale), loc[..., None])
+            ).squeeze()
+            + 2 * (a + b)
         )
         return 1 / 2 * torch.sum(value)
 
