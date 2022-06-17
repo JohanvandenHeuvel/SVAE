@@ -12,7 +12,7 @@ from distributions import (
     Categorical,
     exponential_kld,
 )
-from plot import plot_latent, plot_scatter
+from plot.plot import plot_reconstruction
 
 import os
 
@@ -333,13 +333,10 @@ class SVAE:
 
                 x = Gaussian(eta_x).rsample()
                 mu_y, log_var_y = self.vae.decode(x)
-                plot_scatter(
-                    mu_y.detach().numpy(), title="reconstruction", save_path=path
-                )
-
                 gaussian_stats = Gaussian(eta_x).expected_stats()
                 _, Ex, _, _ = unpack_dense(gaussian_stats)
-                plot_latent(Ex, eta_theta, K, title=f"svae_latents", save_path=path)
+
+                plot_reconstruction(obs, mu_y.detach().numpy(), Ex, eta_theta, title=f"svae", save_path=path)
 
         print("Finished training of the SVAE")
         return train_loss
