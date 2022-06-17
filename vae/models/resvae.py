@@ -5,9 +5,9 @@ from .vae import VAE, init_weights
 
 
 class resVAE(VAE):
-    def __init__(self, input_size, hidden_size, latent_dim, recon_loss="MSE"):
+    def __init__(self, input_size, hidden_size, latent_dim, name, recon_loss="MSE"):
 
-        super().__init__(input_size, hidden_size, latent_dim, recon_loss)
+        super().__init__(input_size, hidden_size, latent_dim, name, recon_loss)
 
         """
         ENCODER

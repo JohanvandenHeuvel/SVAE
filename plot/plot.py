@@ -27,6 +27,11 @@ def plot_reconstruction(data, recon, latent, eta_theta=None, title=None, save_pa
 
 
 def plot_loss(loss, title=None, save_path=None):
+
+    if loss == 0:
+        # TODO needed to handle model loading without losses saved, not most elegant solution
+        return
+
     recon_loss, kld_loss = list(zip(*loss))
     fig, ax = plt.subplots()
     ax.plot(recon_loss)

@@ -15,9 +15,9 @@ def init_weights(m):
         nn.init.normal_(m.bias, mean=0.0, std=0.001)
 
 class VAE(Autoencoder):
-    def __init__(self, input_size, hidden_size, latent_dim, recon_loss="MSE"):
+    def __init__(self, input_size, hidden_size, latent_dim, name, recon_loss="MSE"):
 
-        super(VAE, self).__init__()
+        super(VAE, self).__init__(name)
         self.recon_loss = recon_loss
 
         """

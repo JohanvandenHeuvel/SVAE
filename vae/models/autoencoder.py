@@ -6,11 +6,13 @@ from abc import abstractmethod
 import os
 
 from tqdm import tqdm
+import pathlib
 
 
 class Autoencoder(nn.Module):
-    def __init__(self):
+    def __init__(self, name):
         super().__init__()
+        self.name = name
 
     @abstractmethod
     def encode(self, x):
@@ -31,6 +33,16 @@ class Autoencoder(nn.Module):
     def save_and_log(self, obs, epoch, save_path):
         pass
 
+    def save_model(self):
+        path = pathlib.Path().resolve()
+        torch.save(self.state_dict(), os.path.join(path, f"{self.name}.pt"))
+        print(f"saved model to {os.path.join(path, f'{self.name}.pt')}")
+
+    def load_model(self):
+        path = pathlib.Path().resolve()
+        self.load_state_dict(torch.load(os.path.join(path, f"{self.name}.pt")))
+        print(f"loaded model from {os.path.join(path, f'{self.name}.pt')}")
+
     def reparameterize(self, mu, log_var):
         std = torch.exp(0.5 * log_var)
         eps = torch.randn_like(std)
@@ -42,7 +54,12 @@ class Autoencoder(nn.Module):
         )
         return value
 
-    def fit(self, obs, epochs, batch_size, kld_weight, save_path=None):
+    def fit(self, obs, epochs, batch_size, kld_weight, save_path=None, force_train=False):
+
+        if os.path.exists(os.path.join(pathlib.Path().resolve(), f"{self.name}.pt")) and not force_train:
+            self.load_model()
+            return 0
+
         if save_path is not None:
             os.mkdir(save_path)
 
@@ -80,4 +97,5 @@ class Autoencoder(nn.Module):
             if epoch % (epochs//10) == 0:
                 self.save_and_log(obs, epoch, save_path)
 
+        self.save_model()
         return train_loss
