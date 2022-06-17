@@ -207,39 +207,32 @@ class SVAE:
         )
         return value
 
-    def svae_objective(self, y, mu, log_var, global_kld, local_kld):
-        """
-
-        Parameters
-        ----------
-        x:
-            latents
-        y:
-            observations
-        mu:
-            mu over observations
-        log_var:
-            log_var over observations
-        global_kld:
-
-        local_kld:
-
-
-        Returns
-        -------
-
-        """
-        gaussian_loss = self.vae.log_likelihood(y, mu, log_var)
-
-        loss = gaussian_loss - global_kld - local_kld
-
-        return -loss / len(y)
-
-    def loss_function(self, y, recon, kld):
+    def loss_function(self, y, recon):
         recon_loss = F.mse_loss(recon, y)
-        return recon_loss + kld
+        return recon_loss
 
-    def fit(self, obs, save_path, K, batch_size, epochs):
+    def save_and_log(self, obs, epoch, save_path, eta_theta):
+        mu, log_var = self.vae.encode(torch.tensor(obs).float())
+        scale = -torch.exp(0.5 * log_var)
+        potentials = pack_dense(scale, mu)
+
+        eta_x, _, _, _ = self.local_optimization(potentials, eta_theta)
+
+        x = Gaussian(eta_x).rsample()
+        mu_y, log_var_y = self.vae.decode(x)
+        gaussian_stats = Gaussian(eta_x).expected_stats()
+        _, Ex, _, _ = unpack_dense(gaussian_stats)
+
+        plot_reconstruction(
+            obs,
+            mu_y.detach().numpy(),
+            Ex.detach().numpy(),
+            eta_theta,
+            title=f"{epoch}_svae_recon",
+            save_path=save_path,
+        )
+
+    def fit(self, obs, epochs, batch_size, K, kld_weight, save_path=None):
         """
         Find the optimum for global variational parameter eta_theta, and encoder/decoder parameters.
 
@@ -266,7 +259,7 @@ class SVAE:
             K, D, alpha=1.0, niw_conc=1.0, random_scale=3.0
         )
 
-        vae_optimizer = torch.optim.Adam(self.vae.parameters())
+        optimizer = torch.optim.Adam(self.vae.parameters())
 
         train_loss = []
         for epoch in tqdm(range(epochs)):
@@ -285,7 +278,7 @@ class SVAE:
                 eta_x, eta_z, prior_stats, local_kld = self.local_optimization(
                     potentials, eta_theta
                 )
-
+                
                 x = Gaussian(eta_x).rsample()
 
                 """
@@ -309,34 +302,21 @@ class SVAE:
                 global_kld = prior_kld(eta_theta, eta_theta_prior)
 
                 recon, _ = self.vae.decode(x)
-                vae_optimizer.zero_grad()
-                # loss = self.svae_objective(
-                #     y, mu_y, log_var_y, global_kld, num_batches * local_kld
-                # )
-                loss = self.loss_function(y, recon, local_kld * 0.05)
-                # print(f"total:{total_loss}, ({recon_loss}, {local_kld / num_batches})")
-                total_loss.append(loss.item())
+                recon_loss = self.loss_function(y, recon)
+                kld_loss = local_kld + global_kld
+                loss = recon_loss + kld_weight * kld_loss
+
+                optimizer.zero_grad()
+                # compute gradients
                 loss.backward()
-                vae_optimizer.step()
+                # update parameters
+                optimizer.step()
 
-            train_loss.append(np.mean(total_loss))
+                total_loss.append((recon_loss.item(), kld_weight * kld_loss.item()))
+            train_loss.append(np.mean(total_loss, axis=0))
 
-            if epoch % 10 == 0:
-                path = os.path.join(save_path, f"{epoch}")
-                os.mkdir(path)
-
-                mu, log_var = self.vae.encode(torch.tensor(obs).float())
-                scale = -torch.exp(0.5 * log_var)
-                potentials = pack_dense(scale, mu)
-
-                eta_x, _, _, _ = self.local_optimization(potentials, eta_theta)
-
-                x = Gaussian(eta_x).rsample()
-                mu_y, log_var_y = self.vae.decode(x)
-                gaussian_stats = Gaussian(eta_x).expected_stats()
-                _, Ex, _, _ = unpack_dense(gaussian_stats)
-
-                plot_reconstruction(obs, mu_y.detach().numpy(), Ex, eta_theta, title=f"svae", save_path=path)
+            if epoch % (epochs//10) == 0:
+                self.save_and_log(obs, epoch, save_path, eta_theta)
 
         print("Finished training of the SVAE")
         return train_loss

@@ -9,6 +9,11 @@ from .autoencoder import Autoencoder
 from plot.plot import plot_reconstruction
 
 
+def init_weights(m):
+    if isinstance(m, nn.Linear):
+        nn.init.normal_(m.weight, mean=0.0, std=0.001)
+        nn.init.normal_(m.bias, mean=0.0, std=0.001)
+
 class VAE(Autoencoder):
     def __init__(self, input_size, hidden_size, latent_dim, recon_loss="MSE"):
 
@@ -18,16 +23,22 @@ class VAE(Autoencoder):
         """
         ENCODER
         """
-        encoder = nn.Sequential(nn.Linear(input_size, hidden_size), nn.Tanh())
+        encoder = nn.Sequential(nn.Linear(input_size, hidden_size), nn.ReLU())
         self.mu_enc = nn.Sequential(encoder, nn.Linear(hidden_size, latent_dim))
         self.log_var_enc = nn.Sequential(encoder, nn.Linear(hidden_size, latent_dim))
 
         """
         DECODER
         """
-        decoder = nn.Sequential(nn.Linear(latent_dim, hidden_size), nn.Tanh())
+        decoder = nn.Sequential(nn.Linear(latent_dim, hidden_size), nn.ReLU())
         self.mu_dec = nn.Sequential(decoder, nn.Linear(hidden_size, input_size))
         self.log_var_dec = nn.Sequential(decoder, nn.Linear(hidden_size, input_size))
+
+        self.mu_enc.apply(init_weights)
+        self.log_var_enc.apply(init_weights)
+
+        self.mu_dec.apply(init_weights)
+        self.log_var_dec.apply(init_weights)
 
     def encode(self, x):
         return self.mu_enc(x), self.log_var_enc(x)

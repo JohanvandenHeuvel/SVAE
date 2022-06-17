@@ -1,13 +1,7 @@
 import torch.nn as nn
 
 from .addmodule import AddModule
-from .vae import VAE
-
-
-def init_weights(m):
-    if isinstance(m, nn.Linear):
-        nn.init.normal_(m.weight, mean=0.0, std=0.001)
-        nn.init.normal_(m.bias, mean=0.0, std=0.001)
+from .vae import VAE, init_weights
 
 
 class resVAE(VAE):
