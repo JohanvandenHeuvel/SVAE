@@ -40,13 +40,9 @@ class VAE(Autoencoder):
         mu_x, log_var_x = self.decode(z)
         return mu_x, log_var_x, mu_z, log_var_z
 
-    def loss_function(self, x, recon, mu_z, log_var_z, kld_weight=1.0):
-        kld_loss = torch.mean(
-            -0.5 * torch.sum(1 + log_var_z - mu_z ** 2 - log_var_z.exp(), dim=1), dim=0
-        )
-        recon_loss = F.mse_loss(recon, x)
-        loss = recon_loss + kld_weight * kld_loss
-        return loss
+    def loss_function(self, x, mu_x, log_var_x):
+        recon_loss = F.mse_loss(mu_x, x)
+        return recon_loss
 
     def save_and_log(self, obs, epoch, save_path):
         mu_z, log_var_z = self.encode(torch.Tensor(obs))

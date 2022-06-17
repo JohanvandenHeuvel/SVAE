@@ -27,11 +27,14 @@ def plot_reconstruction(data, recon, latent, eta_theta=None, title=None, save_pa
 
 
 def plot_loss(loss, title=None, save_path=None):
+    recon_loss, kld_loss = list(zip(*loss))
     fig, ax = plt.subplots()
-    ax.plot(loss)
+    ax.plot(recon_loss)
+    ax.plot(kld_loss)
     ax.set_title(title)
     ax.set_xlabel("epochs")
     ax.set_ylabel("loss")
+    ax.legend(["recon", "kld"])
 
     if save_path is not None:
         if title is None:

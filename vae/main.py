@@ -3,7 +3,7 @@ import os
 from data import make_pinwheel_data
 from log import make_folder, save_dict
 from models import resVAE, VAE
-from plot import plot_loss
+from plot.plot import plot_loss
 
 hyperparameters = {
     "VAE_parameters": {"latent_dim": 2, "input_size": 2, "hidden_size": 50,},

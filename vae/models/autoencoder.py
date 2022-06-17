@@ -36,7 +36,13 @@ class Autoencoder(nn.Module):
         eps = torch.randn_like(std)
         return eps * std + mu
 
-    def fit(self, obs, epochs, batch_size, save_path=None, save_every_epoch=10):
+    def kld(self, mu_z, log_var_z):
+        value = torch.mean(
+            -0.5 * torch.sum(1 + log_var_z - mu_z ** 2 - log_var_z.exp(), dim=1), dim=0
+        )
+        return value
+
+    def fit(self, obs, epochs, batch_size, save_path=None):
         if save_path is not None:
             os.mkdir(save_path)
 
@@ -57,7 +63,10 @@ class Autoencoder(nn.Module):
                 obs_batch = obs_batch.float()
 
                 mu_x, log_var_x, mu_z, log_var_z = self.forward(obs_batch)
-                loss = self.loss_function(obs_batch, mu_x, mu_z, log_var_z)
+
+                kld_loss = self.kld(mu_z, log_var_z)
+                recon_loss = self.loss_function(obs_batch, mu_x, log_var_x)
+                loss = recon_loss + 1.0 * kld_loss
 
                 optimizer.zero_grad()
                 # compute gradients
@@ -65,10 +74,10 @@ class Autoencoder(nn.Module):
                 # update parameters
                 optimizer.step()
 
-                total_loss.append(loss.item())
-            train_loss.append(np.mean(total_loss))
+                total_loss.append((recon_loss.item(), kld_loss.item()))
+            train_loss.append(np.mean(total_loss, axis=0))
 
-            if epoch % save_every_epoch == 0:
+            if epoch % (epochs//10) == 0:
                 self.save_and_log(obs, epoch, save_path)
 
         return train_loss

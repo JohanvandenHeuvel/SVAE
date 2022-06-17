@@ -47,8 +47,8 @@ class resVAE(VAE):
         self.mu_dec = AddModule(mu_dec, mu_dec_identity)
         self.log_var_dec = AddModule(log_var_dec, log_var_dec_identity)
 
-        mu_enc.apply(init_weights)
-        log_var_enc.apply(init_weights)
+        self.mu_enc.apply(init_weights)
+        self.log_var_enc.apply(init_weights)
 
-        mu_dec.apply(init_weights)
-        log_var_dec.apply(init_weights)
+        self.mu_dec.apply(init_weights)
+        self.log_var_dec.apply(init_weights)
