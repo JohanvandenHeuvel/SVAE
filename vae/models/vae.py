@@ -10,9 +10,20 @@ from plot.plot import plot_reconstruction
 
 
 def init_weights(m):
+    # if isinstance(m, nn.Linear):
+    #     nn.init.normal_(m.weight, mean=mean, std=0.001)
+    #     nn.init.normal_(m.bias, mean=mean, std=0.001)
+
     if isinstance(m, nn.Linear):
-        nn.init.normal_(m.weight, mean=0.0, std=1.0)
-        nn.init.normal_(m.bias, mean=0.0, std=0.001)
+        # Xavier Initialization for weights
+        size = m.weight.size()
+        fan_out = size[0]
+        fan_in = size[1]
+        std = np.sqrt(2.0 / (fan_in + fan_out))
+        m.weight.data.normal_(0.0, std)
+
+        # Normal Initialization for Biases
+        m.bias.data.normal_(0.0, 0.001)
 
 class VAE(Autoencoder):
     def __init__(self, input_size, hidden_size, latent_dim, name, recon_loss="MSE"):

@@ -4,6 +4,7 @@ from data import make_pinwheel_data
 from log import make_folder, save_dict
 from models import resVAE, VAE
 from plot.plot import plot_loss
+from sklearn.preprocessing import StandardScaler
 
 hyperparameters = {
     "VAE_parameters": {"latent_dim": 2, "input_size": 2, "hidden_size": 50,},
@@ -21,8 +22,9 @@ hyperparameters = {
 def get_data():
     # generate synthetic data
     data = make_pinwheel_data(**hyperparameters["pinwheel_data_parameters"])
-    return data
-
+    scaler = StandardScaler()
+    scaler.fit(data)
+    return scaler.transform(data)
 
 def get_network(data, save_path):
     network = resVAE(**hyperparameters["VAE_parameters"])

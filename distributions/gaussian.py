@@ -52,7 +52,7 @@ class Gaussian(ExpDistribution):
     def natural_to_standard(self):
         eta_2, eta_1, _, _ = unpack_dense(self.nat_param)
 
-        scale = -1 / 2 * torch.inverse(eta_2)
+        scale = -1/2 * torch.inverse(eta_2)
         loc = torch.bmm(scale, eta_1[..., None]).squeeze()
 
         return loc, scale

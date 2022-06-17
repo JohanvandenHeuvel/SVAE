@@ -6,7 +6,7 @@ from dense import unpack_dense
 
 import os
 
-from distributions import Dirichlet, NormalInverseWishart
+from distributions import Dirichlet, NormalInverseWishart, Gaussian
 
 
 def plot_reconstruction(data, recon, latent, eta_theta=None, title=None, save_path=None):
@@ -65,15 +65,13 @@ def _plot_clusters(ax, eta_theta, K=15, title=None):
         ellipse = 2.0 * np.dot(np.linalg.cholesky(Sigma), circle)
         return ellipse[0] + mu[0], ellipse[1] + mu[1]
 
-    def get_component(niw_param):
+    def get_component(gaussian_parameters):
         """
         Get (mu, Sigma)
         """
-        neghalfJ, h, _, _ = unpack_dense(niw_param)
-        J = -2 * neghalfJ
-        mu = torch.linalg.solve(J, h)
-        Sigma = torch.inverse(J)
-        return mu, Sigma
+        loc, scale = Gaussian(gaussian_parameters.unsqueeze(0)).natural_to_standard()
+
+        return loc.squeeze(), scale.squeeze()
 
     def normalize(arr):
         """

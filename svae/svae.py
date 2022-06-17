@@ -110,8 +110,8 @@ class SVAE:
         priors
         """
         dir_param, niw_param = eta_theta
-        label_parameters = Dirichlet(dir_param).expected_stats()
-        gaussian_parameters = NormalInverseWishart(niw_param).expected_stats()
+        label_parameters = Dirichlet(dir_param.detach()).expected_stats()
+        gaussian_parameters = NormalInverseWishart(niw_param.detach()).expected_stats()
 
         """
         optimize local variational parameters
@@ -174,8 +174,8 @@ class SVAE:
         """
         Statistics
         """
-        dirichlet_stats = torch.sum(label_stats, 0).detach()
-        niw_stats = torch.tensordot(label_stats, gaussian_stats, [[0], [0]]).detach()
+        dirichlet_stats = torch.sum(label_stats, 0)
+        niw_stats = torch.tensordot(label_stats, gaussian_stats, [[0], [0]])
         prior_stats = dirichlet_stats, niw_stats
 
         return eta_x, eta_z, prior_stats, local_kld
@@ -285,7 +285,7 @@ class SVAE:
                     prior_stats, eta_theta, eta_theta_prior, len(obs), num_batches
                 )
 
-                step_size = 1e-4
+                step_size = 1e-3
                 eta_theta = tuple(
                     [
                         eta_theta[i] - step_size * nat_grad[i]
@@ -300,7 +300,7 @@ class SVAE:
 
                 mu_y, log_var_y = self.vae.decode(x)
                 recon_loss = self.vae.loss_function(y, mu_y, log_var_y)
-                kld_loss = local_kld + global_kld
+                kld_loss = local_kld
                 loss = recon_loss + kld_weight * kld_loss
 
                 optimizer.zero_grad()

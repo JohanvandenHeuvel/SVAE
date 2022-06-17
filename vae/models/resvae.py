@@ -13,7 +13,12 @@ class resVAE(VAE):
         ENCODER
         """
         # neural net
-        encoder = nn.Sequential(nn.Linear(input_size, hidden_size), nn.ReLU())
+        encoder = nn.Sequential(
+            nn.Linear(input_size, hidden_size),
+            nn.Tanh(),
+            nn.Linear(hidden_size, hidden_size),
+            nn.Tanh(),
+        )
         mu_enc = nn.Sequential(encoder, nn.Linear(hidden_size, latent_dim))
         log_var_enc = nn.Sequential(encoder, nn.Linear(hidden_size, latent_dim))
 
@@ -29,7 +34,12 @@ class resVAE(VAE):
         DECODER 
         """
         # neural net
-        decoder = nn.Sequential(nn.Linear(latent_dim, hidden_size), nn.ReLU())
+        decoder = nn.Sequential(
+            nn.Linear(latent_dim, hidden_size),
+            nn.Tanh(),
+            nn.Linear(hidden_size, hidden_size),
+            nn.Tanh(),
+        )
         mu_dec = nn.Sequential(decoder, nn.Linear(hidden_size, input_size))
         log_var_dec = nn.Sequential(decoder, nn.Linear(hidden_size, input_size))
 
