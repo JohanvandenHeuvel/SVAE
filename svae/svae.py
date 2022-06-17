@@ -207,10 +207,6 @@ class SVAE:
         )
         return value
 
-    def loss_function(self, y, recon):
-        recon_loss = F.mse_loss(recon, y)
-        return recon_loss
-
     def save_and_log(self, obs, epoch, save_path, eta_theta):
         mu, log_var = self.vae.encode(torch.tensor(obs).float())
         scale = -torch.exp(0.5 * log_var)
@@ -262,6 +258,7 @@ class SVAE:
         optimizer = torch.optim.Adam(self.vae.parameters())
 
         train_loss = []
+        self.save_and_log(obs, 0, save_path, eta_theta)
         for epoch in tqdm(range(epochs)):
 
             total_loss = []
@@ -278,7 +275,7 @@ class SVAE:
                 eta_x, eta_z, prior_stats, local_kld = self.local_optimization(
                     potentials, eta_theta
                 )
-                
+
                 x = Gaussian(eta_x).rsample()
 
                 """
@@ -301,8 +298,8 @@ class SVAE:
                 """
                 global_kld = prior_kld(eta_theta, eta_theta_prior)
 
-                recon, _ = self.vae.decode(x)
-                recon_loss = self.loss_function(y, recon)
+                mu_y, log_var_y = self.vae.decode(x)
+                recon_loss = self.vae.loss_function(y, mu_y, log_var_y)
                 kld_loss = local_kld + global_kld
                 loss = recon_loss + kld_weight * kld_loss
 

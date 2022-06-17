@@ -11,7 +11,7 @@ from plot.plot import plot_reconstruction
 
 def init_weights(m):
     if isinstance(m, nn.Linear):
-        nn.init.normal_(m.weight, mean=0.0, std=0.001)
+        nn.init.normal_(m.weight, mean=0.0, std=1.0)
         nn.init.normal_(m.bias, mean=0.0, std=0.001)
 
 class VAE(Autoencoder):
@@ -34,11 +34,11 @@ class VAE(Autoencoder):
         self.mu_dec = nn.Sequential(decoder, nn.Linear(hidden_size, input_size))
         self.log_var_dec = nn.Sequential(decoder, nn.Linear(hidden_size, input_size))
 
-        self.mu_enc.apply(init_weights)
-        self.log_var_enc.apply(init_weights)
-
-        self.mu_dec.apply(init_weights)
-        self.log_var_dec.apply(init_weights)
+        # self.mu_enc.apply(init_weights)
+        # self.log_var_enc.apply(init_weights)
+        #
+        # self.mu_dec.apply(init_weights)
+        # self.log_var_dec.apply(init_weights)
 
     def encode(self, x):
         return self.mu_enc(x), self.log_var_enc(x)
