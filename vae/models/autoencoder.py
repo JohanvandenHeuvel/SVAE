@@ -13,6 +13,7 @@ class Autoencoder(nn.Module):
     def __init__(self, name):
         super().__init__()
         self.name = name
+        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     @abstractmethod
     def encode(self, x):
@@ -63,6 +64,7 @@ class Autoencoder(nn.Module):
         self, obs, epochs, batch_size, kld_weight, save_path=None, force_train=False
     ):
         """Fit auto-encoder model"""
+        self.to(self.device)
 
         # Load model if it exists on disk
         if (
@@ -76,8 +78,9 @@ class Autoencoder(nn.Module):
             os.mkdir(save_path)
 
         # Make data object
+        data = torch.tensor(obs).to(self.device)
         train_loader = torch.utils.data.DataLoader(
-            obs, batch_size=batch_size, shuffle=True
+            data, batch_size=batch_size, shuffle=True
         )
 
         # Create optimizer

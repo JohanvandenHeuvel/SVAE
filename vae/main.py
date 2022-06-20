@@ -7,8 +7,13 @@ from plot.plot import plot_loss
 from sklearn.preprocessing import StandardScaler
 
 hyperparameters = {
-    "VAE_parameters": {"latent_dim": 2, "input_size": 2, "hidden_size": 50,},
-    "VAE_train_parameters": {"epochs": 100, "batch_size": 32,},
+    "VAE_parameters": {
+        "latent_dim": 2,
+        "input_size": 2,
+        "hidden_size": 50,
+        "name": "vae",
+    },
+    "VAE_train_parameters": {"epochs": 100, "batch_size": 32, "kld_weight": 0.1},
     "pinwheel_data_parameters": {
         "radial_std": 0.3,
         "tangential_std": 0.05,

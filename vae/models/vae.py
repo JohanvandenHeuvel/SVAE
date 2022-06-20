@@ -87,14 +87,15 @@ class VAE(Autoencoder):
         return recon_loss
 
     def save_and_log(self, obs, epoch, save_path):
-        mu_z, log_var_z = self.encode(torch.Tensor(obs))
+        data = torch.tensor(obs).to(self.device).float()
+        mu_z, log_var_z = self.encode(data)
         z = self.reparameterize(mu_z, log_var_z)
 
-        mu_x, _, _, _ = self.forward(torch.Tensor(obs))
+        mu_x, _ = self.decode(z)
         plot_reconstruction(
             obs,
-            mu_x.detach().numpy(),
-            z.detach().numpy(),
+            mu_x.cpu().detach().numpy(),
+            z.cpu().detach().numpy(),
             title=f"{epoch}_vae_recon",
             save_path=save_path,
         )
