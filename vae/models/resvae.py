@@ -1,7 +1,8 @@
 import torch.nn as nn
+import torch
 
 from .addmodule import AddModule
-from .vae import VAE, init_weights
+from .vae import VAE, init_weights, rand_partial_isometry
 
 
 class resVAE(VAE):
@@ -22,9 +23,15 @@ class resVAE(VAE):
         mu_enc = nn.Sequential(encoder, nn.Linear(hidden_size, latent_dim))
         log_var_enc = nn.Sequential(encoder, nn.Linear(hidden_size, latent_dim))
 
+        mu_enc.apply(init_weights)
+        log_var_enc.apply(init_weights)
+
         # linear regression
-        mu_enc_identity = nn.Linear(input_size, latent_dim)
-        log_var_enc_identity = nn.Linear(input_size, latent_dim)
+        mu_enc_identity = nn.Linear(input_size, latent_dim, bias=False)
+        log_var_enc_identity = nn.Linear(input_size, latent_dim, bias=False)
+
+        mu_enc_identity.weight = nn.Parameter(torch.tensor(rand_partial_isometry(input_size, latent_dim)).float())
+        log_var_enc_identity.weight = nn.Parameter(torch.zeros_like(mu_enc_identity.weight))
 
         # "res net"
         self.mu_enc = AddModule(mu_enc, mu_enc_identity)
@@ -43,16 +50,16 @@ class resVAE(VAE):
         mu_dec = nn.Sequential(decoder, nn.Linear(hidden_size, input_size))
         log_var_dec = nn.Sequential(decoder, nn.Linear(hidden_size, input_size))
 
+        mu_dec.apply(init_weights)
+        log_var_dec.apply(init_weights)
+
         # linear regression
-        mu_dec_identity = nn.Linear(latent_dim, input_size)
-        log_var_dec_identity = nn.Linear(latent_dim, input_size)
+        mu_dec_identity = nn.Linear(latent_dim, input_size, bias=False)
+        log_var_dec_identity = nn.Linear(latent_dim, input_size, bias=False)
+
+        mu_dec_identity.weight = nn.Parameter(torch.tensor(rand_partial_isometry(latent_dim, input_size)).float())
+        log_var_dec_identity.weight = nn.Parameter(torch.zeros_like(mu_dec_identity.weight))
 
         # "res net"
         self.mu_dec = AddModule(mu_dec, mu_dec_identity)
         self.log_var_dec = AddModule(log_var_dec, log_var_dec_identity)
-
-        self.mu_enc.apply(init_weights)
-        self.log_var_enc.apply(init_weights)
-
-        self.mu_dec.apply(init_weights)
-        self.log_var_dec.apply(init_weights)

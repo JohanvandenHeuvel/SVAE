@@ -40,10 +40,10 @@ def initialize_global_parameters(K, D, alpha, niw_conc, random_scale):
 
     def initialize_niw_natural_parameters(D):
         nu, S, m, kappa = (
-            D,
-            1.0 * np.eye(D),
+            D + niw_conc,
+            (D + niw_conc) * np.eye(D),
             np.zeros(D),
-            1.0,
+            niw_conc,
         )
         m = m + random_scale * np.random.randn(*m.shape)
 
@@ -218,7 +218,8 @@ class SVAE:
 
     def save_and_log(self, obs, epoch, save_path, eta_theta):
         mu, log_var = self.vae.encode(torch.tensor(obs).float())
-        scale = -torch.exp(0.5 * log_var)
+        # scale = -torch.exp(0.5 * log_var)
+        scale = -0.5 * torch.log1p(log_var.exp())
         # scale = -torch.exp(0.5 * torch.log1p(log_var.exp()))
         potentials = pack_dense(scale, mu)
 
@@ -265,7 +266,7 @@ class SVAE:
             K, D, alpha=0.05 / K, niw_conc=1.0, random_scale=0.0
         )
         eta_theta = initialize_global_parameters(
-            K, D, alpha=1.0, niw_conc=1.0, random_scale=1.0
+            K, D, alpha=1.0, niw_conc=1.0, random_scale=3.0
         )
 
         optimizer = torch.optim.Adam(self.vae.parameters())
@@ -280,7 +281,8 @@ class SVAE:
                 y = y.float()
                 # Force scale to be positive, and it's negative inverse to be negative
                 mu, log_var = self.vae.encode(y)
-                scale = -torch.exp(0.5 * log_var)
+                # scale = -torch.exp(0.5 * log_var)
+                scale = -0.5 * torch.log1p(log_var.exp())
                 # scale = -torch.exp(0.5 * torch.log1p(log_var.exp()))
                 potentials = pack_dense(scale, mu)
 
@@ -314,6 +316,7 @@ class SVAE:
                 global_kld = prior_kld(eta_theta, eta_theta_prior)
 
                 mu_y, log_var_y = self.vae.decode(x)
+                log_var_y = torch.log1p(log_var.exp())
                 recon_loss = self.vae.loss_function(y, mu_y, log_var_y)
                 kld_loss = local_kld
                 loss = recon_loss + kld_weight * kld_loss
@@ -327,7 +330,7 @@ class SVAE:
                 total_loss.append((recon_loss.item(), kld_weight * kld_loss.item()))
             train_loss.append(np.mean(total_loss, axis=0))
 
-            if epoch % (epochs // 10) == 0:
+            if epoch % max((epochs // 10), 1) == 0:
                 self.save_and_log(obs, epoch, save_path, eta_theta)
 
         print("Finished training of the SVAE")

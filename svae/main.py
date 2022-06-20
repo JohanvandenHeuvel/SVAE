@@ -12,7 +12,7 @@ hyperparameters = {
     "VAE_parameters": {
         "latent_dim": 2,
         "input_size": 2,
-        "hidden_size": 100,
+        "hidden_size": 40,
         "recon_loss": "likelihood",
         "name": "vae",
     },
@@ -27,7 +27,7 @@ hyperparameters = {
     "SVAE_train_parameters": {
         "K": 15,
         "batch_size": 50,
-        "epochs": 10,
+        "epochs": 500,
         "kld_weight": 0.01,
     },
 }
@@ -37,9 +37,9 @@ def get_data():
     # generate synthetic data
     data = make_pinwheel_data(**hyperparameters["pinwheel_data_parameters"])
     # data = make_two_cluster_data(100)
-    scaler = StandardScaler()
-    scaler.fit(data)
-    data = scaler.transform(data)
+    # scaler = StandardScaler()
+    # scaler.fit(data)
+    # data = scaler.transform(data)
     return data
 
 
