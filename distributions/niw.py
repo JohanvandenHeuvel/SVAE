@@ -3,7 +3,7 @@ from .distribution import ExpDistribution
 import torch
 import numpy as np
 
-from scipy.special import digamma
+from scipy.special import digamma, multigammaln
 
 from dense import pack_dense, unpack_dense
 
@@ -70,20 +70,32 @@ class NormalInverseWishart(ExpDistribution):
     #         + d * np.log(2.0)
     #     ) - np.linalg.slogdet(S)[1]
     #
-    #     foo = np.matmul(m[..., None, :], E_h[..., None])[..., 0, 0]
-    #
     #     return -1.0 / 2 * E_J, E_h, -1.0 / 2 * E_hTJinvh, 1.0 / 2 * E_logdetJ
 
+    # def logZ(self):
+    #     kappa, mu_0, Phi, nu = self.natural_to_standard()
+    #
+    #     _, p, _ = Phi.shape
+    #
+    #     value = (
+    #         -nu / 2 * torch.slogdet(Phi)[1]
+    #         - (nu * p / 2) * torch.log(torch.ones_like(nu) * 2)
+    #         + torch.special.multigammaln(nu / 2, p)
+    #         + p / 2 * torch.log(2 * torch.pi * 1 / kappa)
+    #     )
+    #     foo = self._logZ()
+    #     return torch.sum(value)
+
     def logZ(self):
-        kappa, mu_0, Phi, nu = self.natural_to_standard()
+        kappa, m, S, nu = self.natural_to_standard()
 
-        _, p, _ = Phi.shape
+        p = m.shape[-1]
 
-        value = -nu / 2 * torch.slogdet(Phi)[1]
-        (
-            -(nu * p / 2) * torch.log(torch.ones_like(nu) * 2)
+        value = (
+            p * nu / 2 * torch.log(torch.Tensor([2]))
             + torch.special.multigammaln(nu / 2, p)
-            + p / 2 * torch.log(2 * torch.pi * 1 / kappa)
+            - nu / 2 * torch.slogdet(S)[1]
+            - p / 2 * torch.log(kappa)
         )
         return torch.sum(value)
 
@@ -97,7 +109,8 @@ class NormalInverseWishart(ExpDistribution):
         Phi = (
             eta_2 - torch.einsum("bi,bj->bij", (eta_3, eta_3)) / eta_4[..., None, None]
         )
-        nu = eta_1 - p - 2
+        # nu = eta_1 - p - 2
+        nu = eta_1
 
         return kappa, mu_0, Phi, nu
 
@@ -107,6 +120,7 @@ class NormalInverseWishart(ExpDistribution):
         eta_2 = Phi + kappa * torch.einsum("bi,bj->bij", (mu_0, mu_0))
         eta_3 = kappa * mu_0
         eta_4 = kappa
-        eta_1 = nu + p + 2
+        # eta_1 = nu + p + 2
+        eta_1 = nu
 
         return pack_dense(eta_2, eta_3, eta_4, eta_1)

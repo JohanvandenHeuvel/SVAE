@@ -17,7 +17,7 @@ from plot.plot import plot_reconstruction
 import os
 
 
-def initialize_global_parameters(K, D, alpha, niw_conc=10.0, random_scale=0.0):
+def initialize_global_parameters(K, D, alpha, niw_conc, random_scale):
     """
 
     Parameters
@@ -26,21 +26,24 @@ def initialize_global_parameters(K, D, alpha, niw_conc=10.0, random_scale=0.0):
         Number of clusters.
     D:
         Number of dimensions.
-    alpha
-    niw_conc
-    random_scale
+    alpha:
+
+    niw_conc:
+
+    random_scale:
+
 
     Returns
     -------
 
     """
 
-    def initialize_niw_natural_parameters(N):
+    def initialize_niw_natural_parameters(D):
         nu, S, m, kappa = (
-            N + niw_conc,
-            (N + niw_conc) * np.eye(N),
-            np.zeros(N),
-            niw_conc,
+            D,
+            1.0 * np.eye(D),
+            np.zeros(D),
+            1.0,
         )
         m = m + random_scale * np.random.randn(*m.shape)
 
@@ -106,6 +109,29 @@ class SVAE:
             Number of epochs to train.
         """
 
+        def gaussian_optimization(gaussian_parameters, potentials, label_stats):
+            gaussian_potentials = torch.tensordot(
+                label_stats, gaussian_parameters, [[1], [0]]
+            )
+            eta_x = gaussian_potentials + potentials
+            gaussian_stats = Gaussian(eta_x).expected_stats()
+            gaussian_kld = (
+                torch.tensordot(potentials, gaussian_stats, 3) - Gaussian(eta_x).logZ()
+            )
+            return eta_x, gaussian_stats, gaussian_kld
+
+        def label_optimization(gaussian_parameters, label_parameters, gaussian_stats):
+            label_potentials = torch.tensordot(
+                gaussian_stats, gaussian_parameters, [[1, 2], [1, 2]]
+            )
+            eta_z = label_potentials + label_parameters
+            label_stats = Categorical(eta_z).expected_stats()
+            label_kld = (
+                torch.tensordot(label_stats, label_potentials)
+                - Categorical(eta_z).logZ()
+            )
+            return eta_z, label_stats, label_kld
+
         """
         priors
         """
@@ -122,50 +148,33 @@ class SVAE:
             """
             Gaussian x
             """
-            gaussian_potentials = torch.tensordot(
-                label_stats, gaussian_parameters, [[1], [0]]
-            )
-            eta_x = gaussian_potentials + potentials
-            gaussian_stats = Gaussian(eta_x).expected_stats()
-            gaussian_kld = (
-                torch.tensordot(potentials, gaussian_stats, 3) - Gaussian(eta_x).logZ()
+            _, gaussian_stats, gaussian_kld = gaussian_optimization(
+                gaussian_parameters, potentials, label_stats
             )
 
             """
             Label z
             """
-            label_potentials = torch.tensordot(
-                gaussian_stats, gaussian_parameters, [[1, 2], [1, 2]]
-            )
-            eta_z = label_potentials + label_parameters
-            label_stats = Categorical(eta_z).expected_stats()
-            label_kld = (
-                torch.tensordot(label_stats, label_potentials)
-                - Categorical(eta_z).logZ()
+            _, label_stats, label_kld = label_optimization(
+                gaussian_parameters, label_parameters, gaussian_stats
             )
 
-            kl, prev_l = label_kld + gaussian_kld, kl
-            if abs(kl - prev_l) < 1e-3:
+            # early stopping
+            prev_l = kl
+            kl = label_kld + gaussian_kld
+            if abs(kl - prev_l) < 1e-6:
                 break
         else:
-            print("iteration limit reached")
+            pass
+            # print("iteration limit reached")
 
-        gaussian_potentials = torch.tensordot(
-            label_stats, gaussian_parameters, [[1], [0]]
+        eta_x, gaussian_stats, gaussian_kld = gaussian_optimization(
+            gaussian_parameters, potentials, label_stats
         )
-        eta_x = gaussian_potentials + potentials
-        gaussian_stats = Gaussian(eta_x).expected_stats()
-        gaussian_kld = (
-            torch.tensordot(potentials, gaussian_stats, 3) - Gaussian(eta_x).logZ()
+        _, label_stats, label_kld = label_optimization(
+            gaussian_parameters, label_parameters, gaussian_stats
         )
 
-        label_potentials = torch.tensordot(
-            gaussian_stats, gaussian_parameters, [[1, 2], [1, 2]]
-        )
-        eta_z = label_potentials + label_parameters
-        label_kld = (
-            torch.tensordot(label_stats, label_potentials) - Categorical(eta_z).logZ()
-        )
         """
         KL-Divergence
         """
@@ -178,7 +187,7 @@ class SVAE:
         niw_stats = torch.tensordot(label_stats, gaussian_stats, [[0], [0]])
         prior_stats = dirichlet_stats, niw_stats
 
-        return eta_x, eta_z, prior_stats, local_kld
+        return eta_x, prior_stats, local_kld
 
     def natural_gradient(
         self, stats, eta_theta, eta_theta_prior, N, num_batches, scale=10000.0
@@ -192,7 +201,7 @@ class SVAE:
 
         eta_theta:
             Natural parameters for global variables.
-        D: int
+        N: int
             Number of datapoints.
         scale: float
             Loss weight
@@ -210,14 +219,18 @@ class SVAE:
     def save_and_log(self, obs, epoch, save_path, eta_theta):
         mu, log_var = self.vae.encode(torch.tensor(obs).float())
         scale = -torch.exp(0.5 * log_var)
+        # scale = -torch.exp(0.5 * torch.log1p(log_var.exp()))
         potentials = pack_dense(scale, mu)
 
-        eta_x, _, _, _ = self.local_optimization(potentials, eta_theta)
+        eta_x, _, _ = self.local_optimization(potentials, eta_theta)
 
-        x = Gaussian(eta_x).rsample()
-        mu_y, log_var_y = self.vae.decode(x)
+        # get encoded means
         gaussian_stats = Gaussian(eta_x).expected_stats()
         _, Ex, _, _ = unpack_dense(gaussian_stats)
+
+        # get reconstructions
+        x = Gaussian(eta_x).rsample()
+        mu_y, _ = self.vae.decode(x)
 
         plot_reconstruction(
             obs,
@@ -249,16 +262,17 @@ class SVAE:
         num_batches = len(dataloader)
 
         eta_theta_prior = initialize_global_parameters(
-            K, D, alpha=0.05 / K, niw_conc=0.5
+            K, D, alpha=0.05 / K, niw_conc=1.0, random_scale=0.0
         )
         eta_theta = initialize_global_parameters(
-            K, D, alpha=1.0, niw_conc=1.0, random_scale=3.0
+            K, D, alpha=1.0, niw_conc=1.0, random_scale=1.0
         )
 
         optimizer = torch.optim.Adam(self.vae.parameters())
 
         train_loss = []
-        self.save_and_log(obs, 0, save_path, eta_theta)
+        self.save_and_log(obs, "pre", save_path, eta_theta)
+        self.save_and_log(obs, "pre_prior", save_path, eta_theta_prior)
         for epoch in tqdm(range(epochs)):
 
             total_loss = []
@@ -267,12 +281,13 @@ class SVAE:
                 # Force scale to be positive, and it's negative inverse to be negative
                 mu, log_var = self.vae.encode(y)
                 scale = -torch.exp(0.5 * log_var)
+                # scale = -torch.exp(0.5 * torch.log1p(log_var.exp()))
                 potentials = pack_dense(scale, mu)
 
                 """
                 Find local optimum for local variational parameter eta_x, eta_z
                 """
-                eta_x, eta_z, prior_stats, local_kld = self.local_optimization(
+                eta_x, prior_stats, local_kld = self.local_optimization(
                     potentials, eta_theta
                 )
 
@@ -312,7 +327,7 @@ class SVAE:
                 total_loss.append((recon_loss.item(), kld_weight * kld_loss.item()))
             train_loss.append(np.mean(total_loss, axis=0))
 
-            if epoch % (epochs//10) == 0:
+            if epoch % (epochs // 10) == 0:
                 self.save_and_log(obs, epoch, save_path, eta_theta)
 
         print("Finished training of the SVAE")

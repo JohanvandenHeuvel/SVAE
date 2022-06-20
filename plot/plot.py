@@ -50,9 +50,9 @@ def plot_loss(loss, title=None, save_path=None):
         plt.plot()
 
 
-def _plot_clusters(ax, eta_theta, K=15, title=None):
+def _plot_clusters(ax, eta_theta, title=None):
     """
-    Plot latent dimension, including clusters, of the SVAE
+    Plot latent clusters of the SVAE
     """
 
     def generate_ellipse(mu, Sigma):
@@ -84,6 +84,7 @@ def _plot_clusters(ax, eta_theta, K=15, title=None):
     Get objects for plotting
     """
     dir_param, niw_param = eta_theta
+    K = len(dir_param)
     weights = normalize(torch.exp(Dirichlet(dir_param).expected_stats()))
     components = map(get_component, NormalInverseWishart(niw_param).expected_stats())
 

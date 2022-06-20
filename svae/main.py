@@ -27,7 +27,7 @@ hyperparameters = {
     "SVAE_train_parameters": {
         "K": 15,
         "batch_size": 50,
-        "epochs": 100,
+        "epochs": 10,
         "kld_weight": 0.01,
     },
 }
@@ -39,7 +39,8 @@ def get_data():
     # data = make_two_cluster_data(100)
     scaler = StandardScaler()
     scaler.fit(data)
-    return scaler.transform(data)
+    data = scaler.transform(data)
+    return data
 
 
 def get_network(data, save_path):
