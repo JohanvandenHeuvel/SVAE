@@ -1,22 +1,40 @@
+import os
+
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
-
-from dense import unpack_dense
-
-import os
 
 from distributions import Dirichlet, NormalInverseWishart, Gaussian
 
 
 def plot_reconstruction(data, recon, latent, eta_theta=None, title=None, save_path=None):
+    """
+
+    Parameters
+    ----------
+    data:
+        observations
+    recon:
+        reconstructions of the observations
+    latent:
+        latent representation of the observations
+    eta_theta:
+        parameters for clusters in latent space
+    title: String
+        title for the plot
+    save_path: String
+        where to save the plot
+    """
     fig, (ax1, ax2) = plt.subplots(1, 2)
+    # plot the latent dimension in the left plot
     _plot_scatter(ax1, latent, title="latents")
     if eta_theta is not None:
         _plot_clusters(ax1, eta_theta)
+    # plot the observations in the right plot
     _plot_scatter(ax2, data)
     _plot_scatter(ax2, recon, title="reconstruction")
 
+    # save the figure to disk or show it
     if save_path is not None:
         if title is None:
             raise ValueError(f"saving requires title but title is {title}")
@@ -27,6 +45,21 @@ def plot_reconstruction(data, recon, latent, eta_theta=None, title=None, save_pa
 
 
 def plot_loss(loss, title=None, save_path=None):
+    """
+
+    Parameters
+    ----------
+    loss: List
+        loss values for every epoch
+    title: String
+        title for the plot
+    save_path: String
+        where to save the plot
+
+    Returns
+    -------
+
+    """
 
     if loss == 0:
         # TODO needed to handle model loading without losses saved, not most elegant solution
@@ -41,6 +74,7 @@ def plot_loss(loss, title=None, save_path=None):
     ax.set_ylabel("loss")
     ax.legend(["recon", "kld"])
 
+    # save the figure to disk or show it
     if save_path is not None:
         if title is None:
             raise ValueError(f"saving requires title but title is {title}")
@@ -53,6 +87,16 @@ def plot_loss(loss, title=None, save_path=None):
 def _plot_clusters(ax, eta_theta, title=None):
     """
     Plot latent clusters of the SVAE
+
+    Parameters
+    ----------
+    ax:
+        which ax to plot on
+    eta_theta:
+        parameters for clusters in latent space
+    title: String
+        title for the plot
+
     """
 
     def generate_ellipse(mu, Sigma):

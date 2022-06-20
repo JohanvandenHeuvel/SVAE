@@ -2,7 +2,6 @@ from torch import nn
 
 
 class AddModule(nn.Module):
-
     def __init__(self, left_branch, right_branch):
         """
         Custom module for creating a function of the form: y = f(x) + g(x).

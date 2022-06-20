@@ -24,7 +24,9 @@ def get_data():
     data = make_pinwheel_data(**hyperparameters["pinwheel_data_parameters"])
     scaler = StandardScaler()
     scaler.fit(data)
-    return scaler.transform(data)
+    data = scaler.transform(data)
+    return data
+
 
 def get_network(data, save_path):
     network = resVAE(**hyperparameters["VAE_parameters"])

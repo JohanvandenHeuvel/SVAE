@@ -26,6 +26,17 @@ def make_pinwheel_data(radial_std, tangential_std, num_classes, num_per_class, r
 
 
 def make_two_cluster_data(num_per_class):
+    """Make two gaussian clusters.
+
+    Parameters
+    ----------
+    num_per_class: int
+        number of samples per class
+
+    Returns
+    -------
+
+    """
     mu = np.array([[-1, 1], [1, 1]]) * 4
     Sigma = [[[1, 0], [0, 1]], [[1, 0], [0, 1]]]
 
@@ -42,7 +53,7 @@ if __name__ == "__main__":
     # data = make_pinwheel_data(0.3, 0.05, 5, 100, 0.25)
 
     # generate two clusters
-    data = make_cluster_data(100)
+    data = make_two_cluster_data(100)
 
     plt.scatter(data[:, 0], data[:, 1])
     plt.show()

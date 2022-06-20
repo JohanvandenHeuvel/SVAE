@@ -9,26 +9,43 @@ from .autoencoder import Autoencoder
 from plot.plot import plot_reconstruction
 
 
-def init_weights(m):
-    if isinstance(m, nn.Linear):
-        nn.init.normal_(m.weight, mean=0.0, std=1e-2)
-        nn.init.normal_(m.bias, mean=0.0, std=1e-2)
+def init_weights(l):
+    """Initialization for MLP layers.
 
-    # if isinstance(m, nn.Linear):
-    #     # Xavier Initialization for weights
-    #     size = m.weight.size()
-    #     fan_out = size[0]
-    #     fan_in = size[1]
-    #     std = np.sqrt(2.0 / (fan_in + fan_out))
-    #     m.weight.data.normal_(0.0, std)
-    #
-    #     # Normal Initialization for Biases
-    #     m.bias.data.normal_(0.0, 0.001)
+    E.g. can use: apply(init_weights) on a nn.Sequential object.
+
+    Parameters
+    ----------
+    l: torch.nn.Module
+        layer to initialize.
+
+    Returns
+    -------
+
+    """
+    if isinstance(l, nn.Linear):
+        nn.init.normal_(l.weight, mean=0.0, std=1e-2)
+        nn.init.normal_(l.bias, mean=0.0, std=1e-2)
+
 
 def rand_partial_isometry(m, n):
+    """Initialization for skip connections. Makes sure that the output has a similar scale as the input.
+
+    Parameters
+    ----------
+    m: int
+        input size
+    n: int
+        output size
+
+    Returns
+    -------
+
+    """
     d = max(m, n)
     value = np.linalg.qr(np.random.randn(d, d))[0][:m, :n]
     return value
+
 
 class VAE(Autoencoder):
     def __init__(self, input_size, hidden_size, latent_dim, name, recon_loss="MSE"):
@@ -49,12 +66,6 @@ class VAE(Autoencoder):
         decoder = nn.Sequential(nn.Linear(latent_dim, hidden_size), nn.ReLU())
         self.mu_dec = nn.Sequential(decoder, nn.Linear(hidden_size, input_size))
         self.log_var_dec = nn.Sequential(decoder, nn.Linear(hidden_size, input_size))
-
-        # self.mu_enc.apply(init_weights)
-        # self.log_var_enc.apply(init_weights)
-        #
-        # self.mu_dec.apply(init_weights)
-        # self.log_var_dec.apply(init_weights)
 
     def encode(self, x):
         return self.mu_enc(x), self.log_var_enc(x)

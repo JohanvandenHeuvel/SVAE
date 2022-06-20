@@ -5,7 +5,6 @@ from .distribution import ExpDistribution
 
 
 class Categorical(ExpDistribution):
-
     def __init__(self, nat_param):
         super().__init__(nat_param)
 

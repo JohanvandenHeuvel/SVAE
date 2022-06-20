@@ -1,6 +1,7 @@
+import os
+
 import numpy as np
 import torch
-from torch.nn import functional as F
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
@@ -13,8 +14,6 @@ from distributions import (
     exponential_kld,
 )
 from plot.plot import plot_reconstruction
-
-import os
 
 
 def initialize_global_parameters(K, D, alpha, niw_conc, random_scale):
@@ -218,9 +217,7 @@ class SVAE:
 
     def save_and_log(self, obs, epoch, save_path, eta_theta):
         mu, log_var = self.vae.encode(torch.tensor(obs).float())
-        # scale = -torch.exp(0.5 * log_var)
-        scale = -0.5 * torch.log1p(log_var.exp())
-        # scale = -torch.exp(0.5 * torch.log1p(log_var.exp()))
+        scale = -torch.exp(0.5 * log_var)
         potentials = pack_dense(scale, mu)
 
         eta_x, _, _ = self.local_optimization(potentials, eta_theta)
@@ -273,7 +270,6 @@ class SVAE:
 
         train_loss = []
         self.save_and_log(obs, "pre", save_path, eta_theta)
-        self.save_and_log(obs, "pre_prior", save_path, eta_theta_prior)
         for epoch in tqdm(range(epochs)):
 
             total_loss = []
@@ -281,9 +277,7 @@ class SVAE:
                 y = y.float()
                 # Force scale to be positive, and it's negative inverse to be negative
                 mu, log_var = self.vae.encode(y)
-                # scale = -torch.exp(0.5 * log_var)
-                scale = -0.5 * torch.log1p(log_var.exp())
-                # scale = -torch.exp(0.5 * torch.log1p(log_var.exp()))
+                scale = -torch.exp(0.5 * log_var)
                 potentials = pack_dense(scale, mu)
 
                 """
@@ -316,7 +310,6 @@ class SVAE:
                 global_kld = prior_kld(eta_theta, eta_theta_prior)
 
                 mu_y, log_var_y = self.vae.decode(x)
-                log_var_y = torch.log1p(log_var.exp())
                 recon_loss = self.vae.loss_function(y, mu_y, log_var_y)
                 kld_loss = local_kld
                 loss = recon_loss + kld_weight * kld_loss
