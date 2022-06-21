@@ -52,7 +52,9 @@ def initialize_global_parameters(K, D, alpha, niw_conc, random_scale):
         m = torch.Tensor(m).unsqueeze(0)
         kappa = torch.Tensor([kappa]).unsqueeze(0)
 
-        nat_param = NormalInverseWishart(torch.zeros_like(nu)).standard_to_natural(kappa, m, S, nu)
+        nat_param = NormalInverseWishart(torch.zeros_like(nu)).standard_to_natural(
+            kappa, m, S, nu
+        )
         return nat_param
 
     dirichlet_natural_parameters = alpha * (
@@ -184,14 +186,14 @@ class SVAE:
         """
         Statistics
         """
-        dirichlet_stats = torch.sum(label_stats, 0)
-        niw_stats = torch.tensordot(label_stats, gaussian_stats, [[0], [0]])
+        dirichlet_stats = torch.sum(label_stats, 0).detach()
+        niw_stats = torch.tensordot(label_stats, gaussian_stats, [[0], [0]]).detach()
         prior_stats = dirichlet_stats, niw_stats
 
         return eta_x, label_stats, prior_stats, local_kld
 
     def natural_gradient(
-        self, stats, eta_theta, eta_theta_prior, N, num_batches, scale=10000.0
+        self, stats, eta_theta, eta_theta_prior, N, num_batches
     ):
         """
         Natural gradient for the global variational parameters eta_theta
@@ -209,7 +211,7 @@ class SVAE:
         """
 
         def nat_grad(prior, post, s):
-            return -scale / N * (prior - post + num_batches * s)
+            return -1.0 / N * (prior - post + num_batches * s)
 
         value = (
             nat_grad(eta_theta_prior[0], eta_theta[0], stats[0]),
@@ -273,11 +275,11 @@ class SVAE:
             K, D, alpha=1.0, niw_conc=1.0, random_scale=3.0
         )
 
-        optimizer = torch.optim.Adam(self.vae.parameters())
+        optimizer = torch.optim.Adam(self.vae.parameters(), lr=1e-3, weight_decay=0.001)
 
         train_loss = []
-        self.save_and_log(obs, "pre", save_path, eta_theta)
-        for epoch in tqdm(range(epochs)):
+        # self.save_and_log(obs, "pre", save_path, eta_theta)
+        for epoch in tqdm(range(epochs + 1)):
 
             total_loss = []
             for i, y in enumerate(dataloader):
@@ -300,10 +302,13 @@ class SVAE:
                 Update global variational parameter eta_theta using natural gradient
                 """
                 nat_grad = self.natural_gradient(
-                    prior_stats, eta_theta, eta_theta_prior, len(obs), num_batches
-                )
+                    prior_stats,
+                    eta_theta,
+                    eta_theta_prior,
+                    len(obs),
+                    num_batches)
 
-                step_size = 1e-3
+                step_size = 10
                 eta_theta = tuple(
                     [
                         eta_theta[i] - step_size * nat_grad[i]
@@ -317,8 +322,8 @@ class SVAE:
                 global_kld = prior_kld(eta_theta, eta_theta_prior)
 
                 mu_y, log_var_y = self.vae.decode(x)
-                recon_loss = self.vae.loss_function(y, mu_y, log_var_y)
-                kld_loss = local_kld
+                recon_loss = num_batches * self.vae.loss_function(y, mu_y, log_var_y)
+                kld_loss = global_kld + num_batches * local_kld / len(y)
                 loss = recon_loss + kld_weight * kld_loss
 
                 optimizer.zero_grad()
@@ -330,8 +335,10 @@ class SVAE:
                 total_loss.append((recon_loss.item(), kld_weight * kld_loss.item()))
             train_loss.append(np.mean(total_loss, axis=0))
 
-            if epoch % max((epochs // 10), 1) == 0:
-                self.save_and_log(obs, epoch, save_path, eta_theta)
+            # if epoch % max((epochs // 10), 1) == 0:
+            #     self.save_and_log(obs, epoch, save_path, eta_theta)
+
+        self.save_and_log(obs, "end", save_path, eta_theta)
 
         print("Finished training of the SVAE")
         return train_loss
