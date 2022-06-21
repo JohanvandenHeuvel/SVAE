@@ -172,7 +172,7 @@ class SVAE:
         eta_x, gaussian_stats, gaussian_kld = gaussian_optimization(
             gaussian_parameters, potentials, label_stats
         )
-        _, label_stats, label_kld = label_optimization(
+        eta_z, label_stats, label_kld = label_optimization(
             gaussian_parameters, label_parameters, gaussian_stats
         )
 
@@ -188,7 +188,7 @@ class SVAE:
         niw_stats = torch.tensordot(label_stats, gaussian_stats, [[0], [0]])
         prior_stats = dirichlet_stats, niw_stats
 
-        return eta_x, prior_stats, local_kld
+        return eta_x, label_stats, prior_stats, local_kld
 
     def natural_gradient(
         self, stats, eta_theta, eta_theta_prior, N, num_batches, scale=10000.0
@@ -223,7 +223,7 @@ class SVAE:
         scale = -torch.exp(0.5 * log_var)
         potentials = pack_dense(scale, mu)
 
-        eta_x, _, _ = self.local_optimization(potentials, eta_theta)
+        eta_x, label_stats, _, _ = self.local_optimization(potentials, eta_theta)
 
         # get encoded means
         gaussian_stats = Gaussian(eta_x).expected_stats()
@@ -231,13 +231,15 @@ class SVAE:
 
         # get reconstructions
         x = Gaussian(eta_x).rsample()
-        mu_y, _ = self.vae.decode(x)
+        mu_y, log_var_y = self.vae.decode(x)
 
         plot_reconstruction(
             obs,
             mu_y.cpu().detach().numpy(),
+            log_var_y.cpu().detach().numpy(),
             Ex.cpu().detach().numpy(),
             eta_theta,
+            classes=torch.argmax(label_stats, dim=-1).cpu().detach().numpy(),
             title=f"{epoch}_svae_recon",
             save_path=save_path,
         )
@@ -288,7 +290,7 @@ class SVAE:
                 """
                 Find local optimum for local variational parameter eta_x, eta_z
                 """
-                eta_x, prior_stats, local_kld = self.local_optimization(
+                eta_x, _, prior_stats, local_kld = self.local_optimization(
                     potentials, eta_theta
                 )
 

@@ -96,10 +96,11 @@ class VAE(nn.Module):
         mu_z, log_var_z = self.encode(data)
         z = self.reparameterize(mu_z, log_var_z)
 
-        mu_x, _ = self.decode(z)
+        mu_x, log_var_x = self.decode(z)
         plot_reconstruction(
             obs,
             mu_x.cpu().detach().numpy(),
+            log_var_x.cpu().detach().numpy(),
             z.cpu().detach().numpy(),
             title=f"{epoch}_vae_recon",
             save_path=save_path,

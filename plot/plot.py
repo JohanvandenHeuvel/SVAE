@@ -1,5 +1,6 @@
 import os
 
+import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
@@ -7,8 +8,11 @@ import torch
 from distributions import Dirichlet, NormalInverseWishart, Gaussian
 
 
+cm = plt.get_cmap("tab20")
+
+
 def plot_reconstruction(
-    data, recon, latent, eta_theta=None, title=None, save_path=None
+    data, mu, log_var, latent, eta_theta=None, classes=None, title=None, save_path=None
 ):
     """
 
@@ -27,14 +31,44 @@ def plot_reconstruction(
     save_path: String
         where to save the plot
     """
+
+    def generate_ellipse(params):
+        """
+        Generate ellipse from a (mu, Sigma)
+        """
+        mu, log_var = params
+        Sigma = np.diag(np.exp(0.5 * log_var))
+        t = np.linspace(0, 2 * np.pi, 100) % 2 * np.pi
+        circle = np.vstack((np.sin(t), np.cos(t)))
+        ellipse = 2.0 * np.dot(np.linalg.cholesky(Sigma), circle)
+        return ellipse[0] + mu[0], ellipse[1] + mu[1]
+
+    ellipses = list(map(generate_ellipse, zip(mu, log_var)))
+
     fig, (ax1, ax2) = plt.subplots(1, 2)
-    # plot the latent dimension in the left plot
+
+    """
+    plot the latent dimension in the left plot
+    """
+    # latent data points
     _plot_scatter(ax1, latent, title="latents")
+    # latent clusters
     if eta_theta is not None:
         _plot_clusters(ax1, eta_theta)
-    # plot the observations in the right plot
+
+    """
+    plot the observations in the right plot
+    """
+    # plot observations
     _plot_scatter(ax2, data)
-    _plot_scatter(ax2, recon, title="reconstruction")
+    # plot reconstructions
+    _plot_scatter(ax2, mu, c=classes)
+    # plot variances
+    for (x, y) in ellipses:
+        ax2.plot(x, y, alpha=0.1, linestyle="-", linewidth=1)
+
+    ax1.legend()
+    ax2.legend()
 
     # save the figure to disk or show it
     if save_path is not None:
@@ -138,17 +172,39 @@ def _plot_clusters(ax, eta_theta, title=None):
     """
     plot latent clusters
     """
-    for weight, (mu, Sigma) in zip(weights, components):
-        x, y = generate_ellipse(mu.cpu().detach().numpy(), Sigma.cpu().detach().numpy())
-        ax.plot(x, y, alpha=weight, linestyle="-", linewidth=3)
+    for i, (weight, (mu, Sigma)) in enumerate(zip(weights, components)):
+        # don't plot clusters that are hardly visible
+        if weight > 0.05:
+            x, y = generate_ellipse(
+                mu.cpu().detach().numpy(), Sigma.cpu().detach().numpy()
+            )
+            ax.plot(
+                x,
+                y,
+                alpha=weight,
+                linestyle="-",
+                linewidth=3,
+                color=cm.colors[i],
+                label=f"{i}",
+            )
 
+    ax.legend()
     ax.set_title(title)
 
 
-def _plot_scatter(ax, data, title=None):
+def _plot_scatter(ax, data, c=None, alpha=0.8, title=None):
     """
     Make scatter plot for data of the form [(x1, y1), ..., (xi, yi), ...]
     """
     x, y = zip(*data)
-    ax.scatter(x, y)
+    if c is not None:
+        x = np.array(x)
+        y = np.array(y)
+        for value in np.unique(c):
+            mask = c == value
+            ax.scatter(
+                x[mask], y[mask], alpha=alpha, color=cm.colors[value], label=f"{value}"
+            )
+    else:
+        ax.scatter(x, y, alpha=alpha)
     ax.set_title(title)
