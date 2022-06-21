@@ -136,13 +136,15 @@ class SVAE:
             )
             return eta_z, label_stats, label_kld
 
+        # with torch.no_grad():
         """
         priors
         """
         dir_param, niw_param = eta_theta
-        label_parameters = Dirichlet(dir_param.detach()).expected_stats()
-        gaussian_parameters = NormalInverseWishart(niw_param.detach()).expected_stats()
+        label_parameters = Dirichlet(dir_param).expected_stats()
+        gaussian_parameters = NormalInverseWishart(niw_param).expected_stats()
 
+        # with torch.no_grad():
         """
         optimize local variational parameters
         """
@@ -174,7 +176,7 @@ class SVAE:
         eta_x, gaussian_stats, gaussian_kld = gaussian_optimization(
             gaussian_parameters, potentials, label_stats
         )
-        eta_z, label_stats, label_kld = label_optimization(
+        _, label_stats, label_kld = label_optimization(
             gaussian_parameters, label_parameters, gaussian_stats
         )
 
@@ -186,15 +188,13 @@ class SVAE:
         """
         Statistics
         """
-        dirichlet_stats = torch.sum(label_stats, 0).detach()
-        niw_stats = torch.tensordot(label_stats, gaussian_stats, [[0], [0]]).detach()
+        dirichlet_stats = torch.sum(label_stats, 0)
+        niw_stats = torch.tensordot(label_stats, gaussian_stats, [[0], [0]])
         prior_stats = dirichlet_stats, niw_stats
 
         return eta_x, label_stats, prior_stats, local_kld
 
-    def natural_gradient(
-        self, stats, eta_theta, eta_theta_prior, N, num_batches
-    ):
+    def natural_gradient(self, stats, eta_theta, eta_theta_prior, N, num_batches):
         """
         Natural gradient for the global variational parameters eta_theta
 
@@ -220,31 +220,32 @@ class SVAE:
         return value
 
     def save_and_log(self, obs, epoch, save_path, eta_theta):
-        data = torch.tensor(obs).to(self.vae.device).float()
-        mu, log_var = self.vae.encode(data)
-        scale = -torch.exp(0.5 * log_var)
-        potentials = pack_dense(scale, mu)
+        with torch.no_grad():
+            data = torch.tensor(obs).to(self.vae.device).float()
+            mu, log_var = self.vae.encode(data)
+            scale = -torch.exp(0.5 * log_var)
+            potentials = pack_dense(scale, mu)
 
-        eta_x, label_stats, _, _ = self.local_optimization(potentials, eta_theta)
+            eta_x, label_stats, _, _ = self.local_optimization(potentials, eta_theta)
 
-        # get encoded means
-        gaussian_stats = Gaussian(eta_x).expected_stats()
-        _, Ex, _, _ = unpack_dense(gaussian_stats)
+            # get encoded means
+            gaussian_stats = Gaussian(eta_x).expected_stats()
+            _, Ex, _, _ = unpack_dense(gaussian_stats)
 
-        # get reconstructions
-        x = Gaussian(eta_x).rsample()
-        mu_y, log_var_y = self.vae.decode(x)
+            # get reconstructions
+            x = Gaussian(eta_x).rsample()
+            mu_y, log_var_y = self.vae.decode(x)
 
-        plot_reconstruction(
-            obs,
-            mu_y.cpu().detach().numpy(),
-            log_var_y.cpu().detach().numpy(),
-            Ex.cpu().detach().numpy(),
-            eta_theta,
-            classes=torch.argmax(label_stats, dim=-1).cpu().detach().numpy(),
-            title=f"{epoch}_svae_recon",
-            save_path=save_path,
-        )
+            plot_reconstruction(
+                obs,
+                mu_y.cpu().detach().numpy(),
+                log_var_y.cpu().detach().numpy(),
+                Ex.cpu().detach().numpy(),
+                eta_theta,
+                classes=torch.argmax(label_stats, dim=-1).cpu().detach().numpy(),
+                title=f"{epoch}_svae_recon",
+                save_path=save_path,
+            )
 
     def fit(self, obs, epochs, batch_size, K, kld_weight, save_path=None):
         """
@@ -283,6 +284,10 @@ class SVAE:
 
             total_loss = []
             for i, y in enumerate(dataloader):
+
+                # remove dependency on previous iterations
+                eta_theta = (eta_theta[0].detach(), eta_theta[1].detach())
+
                 y = y.float()
                 # Force scale to be positive, and it's negative inverse to be negative
                 mu, log_var = self.vae.encode(y)
@@ -302,11 +307,8 @@ class SVAE:
                 Update global variational parameter eta_theta using natural gradient
                 """
                 nat_grad = self.natural_gradient(
-                    prior_stats,
-                    eta_theta,
-                    eta_theta_prior,
-                    len(obs),
-                    num_batches)
+                    prior_stats, eta_theta, eta_theta_prior, len(obs), num_batches
+                )
 
                 step_size = 10
                 eta_theta = tuple(
@@ -335,8 +337,8 @@ class SVAE:
                 total_loss.append((recon_loss.item(), kld_weight * kld_loss.item()))
             train_loss.append(np.mean(total_loss, axis=0))
 
-            # if epoch % max((epochs // 10), 1) == 0:
-            #     self.save_and_log(obs, epoch, save_path, eta_theta)
+            if epoch % max((epochs // 10), 1) == 0:
+                self.save_and_log(obs, epoch, save_path, eta_theta)
 
         self.save_and_log(obs, "end", save_path, eta_theta)
 
