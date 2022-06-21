@@ -5,8 +5,12 @@ from .distribution import ExpDistribution
 
 
 def multidigamma(input, p):
-    values = torch.stack([torch.digamma(input - i / 2) for i in range(p)])
-    return torch.sum(values, dim=0)
+    arr = torch.arange(0, p, device=input.device)
+    # input[..., None] - arr[None, ...] is like [input - i for i in range(p)] excluding somme list manipulation
+    values = torch.digamma(input[..., None] - arr[None, ...] / 2)
+    # sum over values of p
+    result = torch.sum(values, dim=-1)
+    return result
 
 
 class NormalInverseWishart(ExpDistribution):
