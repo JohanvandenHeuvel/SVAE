@@ -7,7 +7,9 @@ import torch
 from distributions import Dirichlet, NormalInverseWishart, Gaussian
 
 
-def plot_reconstruction(data, recon, latent, eta_theta=None, title=None, save_path=None):
+def plot_reconstruction(
+    data, recon, latent, eta_theta=None, title=None, save_path=None
+):
     """
 
     Parameters
@@ -121,7 +123,6 @@ def _plot_clusters(ax, eta_theta, title=None):
         """
         Make sure that 'arr' sums to 1.0
         """
-        arr = arr.detach().numpy()
         return np.minimum(1.0, arr / np.sum(arr) * K)
 
     """
@@ -129,14 +130,16 @@ def _plot_clusters(ax, eta_theta, title=None):
     """
     dir_param, niw_param = eta_theta
     K = len(dir_param)
-    weights = normalize(torch.exp(Dirichlet(dir_param).expected_stats()))
+    weights = normalize(
+        torch.exp(Dirichlet(dir_param).expected_stats()).cpu().detach().numpy()
+    )
     components = map(get_component, NormalInverseWishart(niw_param).expected_stats())
 
     """
     plot latent clusters
     """
     for weight, (mu, Sigma) in zip(weights, components):
-        x, y = generate_ellipse(mu.detach().numpy(), Sigma.detach().numpy())
+        x, y = generate_ellipse(mu.cpu().detach().numpy(), Sigma.cpu().detach().numpy())
         ax.plot(x, y, alpha=weight, linestyle="-", linewidth=3)
 
     ax.set_title(title)
@@ -149,6 +152,3 @@ def _plot_scatter(ax, data, title=None):
     x, y = zip(*data)
     ax.scatter(x, y)
     ax.set_title(title)
-
-
-

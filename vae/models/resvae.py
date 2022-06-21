@@ -78,3 +78,5 @@ class resVAE(VAE):
         # "res net"
         self.mu_dec = AddModule(mu_dec, mu_dec_identity)
         self.log_var_dec = AddModule(log_var_dec, log_var_dec_identity)
+
+        self.to(self.device)

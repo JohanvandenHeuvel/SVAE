@@ -32,6 +32,8 @@ def pack_dense(A, b, c=None, d=None):
     -------
     densely packed array
     """
+    # device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    device = A.device
 
     leading_dim = b.shape[:-1]
     last_dim = b.shape[-1]
@@ -44,12 +46,12 @@ def pack_dense(A, b, c=None, d=None):
         [a1, 0]
         [0, a2] 
         """
-        A = A[..., None] * torch.eye(last_dim)[None, ...]
+        A = A[..., None] * torch.eye(last_dim, device=device)[None, ...]
 
     # top rows where A and b go
-    z1 = torch.zeros(leading_dim + (last_dim, 1))
+    z1 = torch.zeros(leading_dim + (last_dim, 1), device=device)
     # bottom rows where c and d go
-    z2 = torch.zeros(leading_dim + (1, 1))
+    z2 = torch.zeros(leading_dim + (1, 1), device=device)
 
     if c is None:
         c = z2

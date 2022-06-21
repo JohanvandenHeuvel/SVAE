@@ -36,6 +36,7 @@ def initialize_global_parameters(K, D, alpha, niw_conc, random_scale):
     -------
 
     """
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     def initialize_niw_natural_parameters(D):
         nu, S, m, kappa = (
@@ -51,7 +52,7 @@ def initialize_global_parameters(K, D, alpha, niw_conc, random_scale):
         m = torch.Tensor(m).unsqueeze(0)
         kappa = torch.Tensor([kappa]).unsqueeze(0)
 
-        nat_param = NormalInverseWishart(None).standard_to_natural(kappa, m, S, nu)
+        nat_param = NormalInverseWishart(torch.zeros_like(nu)).standard_to_natural(kappa, m, S, nu)
         return nat_param
 
     dirichlet_natural_parameters = alpha * (
@@ -64,13 +65,14 @@ def initialize_global_parameters(K, D, alpha, niw_conc, random_scale):
     dirichlet_natural_parameters = dirichlet_natural_parameters.detach()
     niw_natural_parameters = niw_natural_parameters.detach()
 
-    return dirichlet_natural_parameters, niw_natural_parameters
+    return dirichlet_natural_parameters.to(device), niw_natural_parameters.to(device)
 
 
 def initialize_meanfield(label_parameters, potentials):
+    device = potentials.device
     T = len(potentials)
     K = len(label_parameters)
-    x = torch.rand(T, K)
+    x = torch.rand(T, K, device=device)
     value = x / torch.sum(x, dim=-1, keepdim=True)
     return value
 
@@ -93,6 +95,7 @@ def prior_kld(eta_theta, eta_theta_prior):
 class SVAE:
     def __init__(self, vae):
         self.vae = vae
+        self.device = vae.device
 
     def local_optimization(self, potentials, eta_theta, epochs=100):
         """
@@ -161,11 +164,10 @@ class SVAE:
             # early stopping
             prev_l = kl
             kl = label_kld + gaussian_kld
-            if abs(kl - prev_l) < 1e-6:
+            if abs(kl - prev_l) < 1e-3:
                 break
         else:
-            pass
-            # print("iteration limit reached")
+            print("iteration limit reached")
 
         eta_x, gaussian_stats, gaussian_kld = gaussian_optimization(
             gaussian_parameters, potentials, label_stats
@@ -216,7 +218,8 @@ class SVAE:
         return value
 
     def save_and_log(self, obs, epoch, save_path, eta_theta):
-        mu, log_var = self.vae.encode(torch.tensor(obs).float())
+        data = torch.tensor(obs).to(self.vae.device).float()
+        mu, log_var = self.vae.encode(data)
         scale = -torch.exp(0.5 * log_var)
         potentials = pack_dense(scale, mu)
 
@@ -232,8 +235,8 @@ class SVAE:
 
         plot_reconstruction(
             obs,
-            mu_y.detach().numpy(),
-            Ex.detach().numpy(),
+            mu_y.cpu().detach().numpy(),
+            Ex.cpu().detach().numpy(),
             eta_theta,
             title=f"{epoch}_svae_recon",
             save_path=save_path,
@@ -250,15 +253,17 @@ class SVAE:
         epochs:
             Number of epochs to train.
         """
-
         print("Training the SVAE ...")
         os.mkdir(save_path)
 
-        _, D = obs.shape
-
-        dataloader = DataLoader(obs, batch_size=batch_size, shuffle=True)
+        # Make data object
+        data = torch.tensor(obs).to(self.vae.device)
+        dataloader = torch.utils.data.DataLoader(
+            data, batch_size=batch_size, shuffle=True
+        )
         num_batches = len(dataloader)
 
+        _, D = data.shape
         eta_theta_prior = initialize_global_parameters(
             K, D, alpha=0.05 / K, niw_conc=1.0, random_scale=0.0
         )
