@@ -325,8 +325,8 @@ class SVAE:
 
                 mu_y, log_var_y = self.vae.decode(x)
                 recon_loss = num_batches * self.vae.loss_function(y, mu_y, log_var_y)
-                kld_loss = global_kld + num_batches * local_kld / len(y)
-                loss = recon_loss + kld_weight * kld_loss
+                kld_loss = global_kld + num_batches * local_kld
+                loss = recon_loss + kld_weight * (kld_loss / len(y))
 
                 optimizer.zero_grad()
                 # compute gradients
