@@ -45,7 +45,7 @@ def plot_reconstruction(
 
     ellipses = list(map(generate_ellipse, zip(mu, log_var)))
 
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 10))
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 5))
 
     """
     plot the latent dimension in the left plot
@@ -64,8 +64,8 @@ def plot_reconstruction(
     # plot reconstructions
     _plot_scatter(ax2, mu, c=classes, title="reconstruction")
     # plot variances
-    for (x, y) in ellipses:
-        ax2.plot(x, y, alpha=0.1, linestyle="-", linewidth=1)
+    # for (x, y) in ellipses:
+    #     ax2.plot(x, y, alpha=0.1, linestyle="-", linewidth=1)
 
     ax1.legend()
     ax2.legend()
@@ -205,7 +205,7 @@ def _plot_scatter(ax, data, c=None, alpha=0.7, title=None):
         for value in np.unique(c):
             mask = c == value
             ax.scatter(
-                x[mask], y[mask], alpha=alpha, color=cm.colors[value], label=f"{value}"
+                x[mask], y[mask], color=cm.colors[value], label=f"{value}"
             )
     else:
         ax.scatter(x, y, c="black", alpha=alpha)
