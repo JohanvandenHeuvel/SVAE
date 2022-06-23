@@ -45,7 +45,7 @@ def plot_reconstruction(
 
     ellipses = list(map(generate_ellipse, zip(mu, log_var)))
 
-    fig, (ax1, ax2) = plt.subplots(1, 2)
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 10))
 
     """
     plot the latent dimension in the left plot
@@ -54,15 +54,15 @@ def plot_reconstruction(
     _plot_scatter(ax1, latent, title="latents")
     # latent clusters
     if eta_theta is not None:
-        _plot_clusters(ax1, eta_theta)
+        _plot_clusters(ax1, eta_theta, title="latents")
 
     """
     plot the observations in the right plot
     """
     # plot observations
-    _plot_scatter(ax2, data)
+    _plot_scatter(ax2, data, title="reconstruction")
     # plot reconstructions
-    _plot_scatter(ax2, mu, c=classes)
+    _plot_scatter(ax2, mu, c=classes, title="reconstruction")
     # plot variances
     for (x, y) in ellipses:
         ax2.plot(x, y, alpha=0.1, linestyle="-", linewidth=1)
@@ -70,6 +70,8 @@ def plot_reconstruction(
     ax1.legend()
     ax2.legend()
 
+    fig.suptitle(title)
+    fig.tight_layout()
     # save the figure to disk or show it
     if save_path is not None:
         if title is None:
@@ -192,7 +194,7 @@ def _plot_clusters(ax, eta_theta, title=None):
     ax.set_title(title)
 
 
-def _plot_scatter(ax, data, c=None, alpha=0.8, title=None):
+def _plot_scatter(ax, data, c=None, alpha=0.7, title=None):
     """
     Make scatter plot for data of the form [(x1, y1), ..., (xi, yi), ...]
     """
@@ -206,5 +208,5 @@ def _plot_scatter(ax, data, c=None, alpha=0.8, title=None):
                 x[mask], y[mask], alpha=alpha, color=cm.colors[value], label=f"{value}"
             )
     else:
-        ax.scatter(x, y, alpha=alpha)
+        ax.scatter(x, y, c="black", alpha=alpha)
     ax.set_title(title)

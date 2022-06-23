@@ -66,7 +66,7 @@ class SVAE:
                 Ex.cpu().detach().numpy(),
                 eta_theta,
                 classes=torch.argmax(label_stats, dim=-1).cpu().detach().numpy(),
-                title=f"{epoch}_svae_recon",
+                title=f"epoch:{epoch}_svae",
                 save_path=save_path,
             )
 
@@ -90,7 +90,9 @@ class SVAE:
             Where to save plots etc.
         """
         print("Training the SVAE ...")
-        os.mkdir(save_path)
+
+        if save_path is not None:
+            os.mkdir(save_path)
 
         # Make data object
         data = torch.tensor(obs).to(self.vae.device)
@@ -160,10 +162,10 @@ class SVAE:
 
                 # regularization
                 global_kld = prior_kld(eta_theta, eta_theta_prior)
-                kld_loss = global_kld + num_batches * local_kld
+                kld_loss = (global_kld + num_batches * local_kld) / len(y)
 
                 # loss is a combination of above two
-                loss = recon_loss + kld_weight * (kld_loss / len(y))
+                loss = recon_loss + kld_weight * kld_loss
 
                 optimizer.zero_grad()
                 # compute gradients
