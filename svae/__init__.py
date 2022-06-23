@@ -1,1 +1,1 @@
-from .svae import SVAE
+from .model import SVAE

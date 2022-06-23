@@ -1,33 +1,35 @@
 from abc import ABC, abstractmethod
+from typing import Tuple
+
 import torch
 
 
 class ExpDistribution(ABC):
-    def __init__(self, nat_param):
+    def __init__(self, nat_param: torch.Tensor):
         self._nat_param = nat_param
 
     @abstractmethod
-    def expected_stats(self):
+    def expected_stats(self) -> torch.Tensor:
         """Compute expected statistics."""
         pass
 
     @abstractmethod
-    def logZ(self):
+    def logZ(self) -> float:
         """Compute log normalization constant."""
         pass
 
     @abstractmethod
-    def natural_to_standard(self):
+    def natural_to_standard(self) -> Tuple:
         """Convert natural parameters to standard parameters."""
         pass
 
     @abstractmethod
-    def standard_to_natural(self, *args):
+    def standard_to_natural(self, *args) -> torch.Tensor:
         """Convert standard parameters to natural parameters."""
         pass
 
     @property
-    def nat_param(self):
+    def nat_param(self) -> torch.Tensor:
         """Get the natural parameters.
 
         Returns
@@ -38,7 +40,7 @@ class ExpDistribution(ABC):
         return self._nat_param
 
     @nat_param.setter
-    def nat_param(self, value):
+    def nat_param(self, value: torch.Tensor):
         """Set the natural parameters.
 
         Parameters
@@ -49,7 +51,7 @@ class ExpDistribution(ABC):
         self._nat_param = value
 
 
-def exponential_kld(dist_1: ExpDistribution, dist_2: ExpDistribution):
+def exponential_kld(dist_1: ExpDistribution, dist_2: ExpDistribution) -> float:
     # TODO sometimes gives negative values
     value = (
         torch.flatten((dist_1.nat_param - dist_2.nat_param))
@@ -58,4 +60,4 @@ def exponential_kld(dist_1: ExpDistribution, dist_2: ExpDistribution):
         + dist_2.logZ()
     )
     assert value >= 0
-    return value
+    return value.item()

@@ -5,19 +5,21 @@ from .distribution import ExpDistribution
 
 
 class Gaussian(ExpDistribution):
-    def __init__(self, nat_param):
+    def __init__(self, nat_param: torch.Tensor):
         super().__init__(nat_param)
         self.device = nat_param.device
 
-    def expected_stats(self):
+    def expected_stats(self) -> torch.Tensor:
         """Compute the expected statistics of the multivariate Gaussian.
 
         Returns
         -------
-        E_x : torch.Tensor
+        E_x:
             Expected value of x
-        E_xxT : torch.Tensor
+        E_xxT:
             Expected value of xxT
+        E_n:
+            Identity.
         """
         loc, scale = self.natural_to_standard()
 
