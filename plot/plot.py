@@ -12,20 +12,31 @@ cm = plt.get_cmap("tab20")
 
 
 def plot_reconstruction(
-    data, mu, log_var, latent, eta_theta=None, classes=None, title=None, save_path=None
+    obs=None,
+    mu=None,
+    log_var=None,
+    latent=None,
+    eta_theta=None,
+    classes=None,
+    title=None,
+    save_path=None,
 ):
     """
 
     Parameters
     ----------
-    data:
+    obs:
         observations
-    recon:
+    mu:
         reconstructions of the observations
+    log_var:
+        variance for the reconstructions
     latent:
         latent representation of the observations
     eta_theta:
         parameters for clusters in latent space
+    classes:
+        cluster assignment for the data-points
     title: String
         title for the plot
     save_path: String
@@ -34,7 +45,7 @@ def plot_reconstruction(
 
     def generate_ellipse(params):
         """
-        Generate ellipse from a (mu, Sigma)
+        Generate ellipse from (mu, Sigma)
         """
         mu, log_var = params
         Sigma = np.diag(np.exp(0.5 * log_var))
@@ -43,32 +54,32 @@ def plot_reconstruction(
         ellipse = 2.0 * np.dot(np.linalg.cholesky(Sigma), circle)
         return ellipse[0] + mu[0], ellipse[1] + mu[1]
 
-    ellipses = list(map(generate_ellipse, zip(mu, log_var)))
-
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 5))
 
     """
     plot the latent dimension in the left plot
     """
-    # latent data points
-    _plot_scatter(ax1, latent, title="latents")
-    # latent clusters
+    if latent is not None:
+        _plot_scatter(ax1, latent, title="latents")
+
     if eta_theta is not None:
         _plot_clusters(ax1, eta_theta, title="latents")
+        ax1.legend()
 
     """
     plot the observations in the right plot
     """
-    # plot observations
-    _plot_scatter(ax2, data, title="reconstruction")
-    # plot reconstructions
-    _plot_scatter(ax2, mu, c=classes, title="reconstruction")
-    # plot variances
-    # for (x, y) in ellipses:
-    #     ax2.plot(x, y, alpha=0.1, linestyle="-", linewidth=1)
+    if obs is not None:
+        _plot_scatter(ax2, obs, title="reconstruction")
 
-    ax1.legend()
-    ax2.legend()
+    if mu is not None:
+        _plot_scatter(ax2, mu, c=classes, title="reconstruction")
+        ax2.legend()
+
+        if log_var is not None:
+            ellipses = list(map(generate_ellipse, zip(mu, log_var)))
+            for (x, y) in ellipses:
+                ax2.plot(x, y, alpha=0.1, linestyle="-", linewidth=1)
 
     fig.suptitle(title)
     fig.tight_layout()
@@ -177,9 +188,11 @@ def _plot_clusters(ax, eta_theta, title=None):
     for i, (weight, (mu, Sigma)) in enumerate(zip(weights, components)):
         # don't plot clusters that are hardly visible
         if weight > 0.05:
-            x, y = generate_ellipse(
-                mu.cpu().detach().numpy(), Sigma.cpu().detach().numpy()
-            )
+            if isinstance(mu, torch.Tensor):
+                mu = mu.cpu().detach().numpy()
+            if isinstance(Sigma, torch.Tensor):
+                Sigma = Sigma.cpu().detach().numpy()
+            x, y = generate_ellipse(mu, Sigma)
             ax.plot(
                 x,
                 y,
@@ -204,9 +217,7 @@ def _plot_scatter(ax, data, c=None, alpha=0.7, title=None):
         y = np.array(y)
         for value in np.unique(c):
             mask = c == value
-            ax.scatter(
-                x[mask], y[mask], color=cm.colors[value], label=f"{value}"
-            )
+            ax.scatter(x[mask], y[mask], color=cm.colors[value], label=f"{value}")
     else:
         ax.scatter(x, y, c="black", alpha=alpha)
     ax.set_title(title)

@@ -2,6 +2,25 @@ import torch
 
 from .distribution import ExpDistribution
 
+from scipy.stats import dirichlet
+
+
+def sample(alpha, n=1):
+    """
+
+    Parameters
+    ----------
+    alpha:
+        concentration parameters
+    n:
+        number of samples
+
+    Returns
+    -------
+
+    """
+    return dirichlet.rvs(alpha=alpha, size=n)
+
 
 class Dirichlet(ExpDistribution):
     def __init__(self, nat_param):
@@ -24,3 +43,7 @@ class Dirichlet(ExpDistribution):
 
     def standard_to_natural(self, alpha):
         return alpha - 1
+
+    def sample(self, n):
+        alpha = self.natural_to_standard()
+        return sample(alpha.cpu().detach().numpy(), n)

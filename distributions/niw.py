@@ -3,6 +3,8 @@ import torch
 from dense import pack_dense, unpack_dense
 from .distribution import ExpDistribution
 
+from scipy.stats import invwishart, multivariate_normal
+
 
 def multidigamma(input, p):
     arr = torch.arange(0, p, device=input.device)
@@ -45,6 +47,16 @@ def batch_elementwise_multiplication(x, y):
     """
     assert x.shape[1] == 1
     return torch.einsum("ba, bij -> bij", (x, y))
+
+
+def sample(kappa, mu_0, Phi, nu, n=1):
+    # first sample Sigma from inverse-wishart
+    Sigma = invwishart.rvs(df=nu, scale=Phi, size=n)
+    # second sample mu from multivariate-normal
+    mu = multivariate_normal.rvs(
+        mu_0, 1 / kappa * Sigma, size=n
+    )
+    return mu, Sigma
 
 
 class NormalInverseWishart(ExpDistribution):
@@ -138,3 +150,14 @@ class NormalInverseWishart(ExpDistribution):
         eta_1 = nu
 
         return pack_dense(eta_2, eta_3, eta_4, eta_1)
+
+    def sample(self, labels, n=1):
+        """get n samples from the k-th cluster"""
+        kappa, mu_0, Phi, nu = self.natural_to_standard()
+
+        kappa = kappa.cpu().detach().numpy()
+        mu_0 = mu_0.cpu().detach().numpy()
+        Phi = Phi.cpu().detach().numpy()
+        nu = nu.cpu().detach().numpy()
+
+        return [sample(kappa[k], mu_0[k], Phi[k], nu[k], n) for k in labels]

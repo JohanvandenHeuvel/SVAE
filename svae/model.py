@@ -21,8 +21,8 @@ from vae import VAE
 
 
 def prior_kld(
-        eta_theta: Tuple[torch.Tensor, torch.Tensor],
-        eta_theta_prior: Tuple[torch.Tensor, torch.Tensor],
+    eta_theta: Tuple[torch.Tensor, torch.Tensor],
+    eta_theta_prior: Tuple[torch.Tensor, torch.Tensor],
 ) -> float:
     dir_params, niw_params = eta_theta
     dir_params_prior, niw_params_prior = eta_theta_prior
@@ -83,7 +83,6 @@ class SVAE:
         mu_y, log_var_y = self.decode(x)
         return mu_y, log_var_y, x, classes
 
-
     def save_and_log(self, obs, epoch, save_path, eta_theta):
         with torch.no_grad():
             data = torch.tensor(obs).to(self.vae.device).float()
@@ -100,11 +99,11 @@ class SVAE:
             mu_y, log_var_y = self.decode(x)
 
             plot_reconstruction(
-                obs,
-                mu_y.cpu().detach().numpy(),
-                log_var_y.cpu().detach().numpy(),
-                Ex.cpu().detach().numpy(),
-                eta_theta,
+                obs=obs,
+                mu=mu_y.cpu().detach().numpy(),
+                log_var=log_var_y.cpu().detach().numpy(),
+                latent=Ex.cpu().detach().numpy(),
+                eta_theta=eta_theta,
                 classes=torch.argmax(label_stats, dim=-1).cpu().detach().numpy(),
                 title=f"epoch:{epoch}_svae",
                 save_path=save_path,
@@ -162,7 +161,6 @@ class SVAE:
 
                 # remove dependency on previous iterations
                 eta_theta = (eta_theta[0].detach(), eta_theta[1].detach())
-
 
                 """
                 Find local optimum for local variational parameters eta_x, eta_z

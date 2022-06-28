@@ -3,6 +3,31 @@ import torch
 from dense import pack_dense, unpack_dense
 from .distribution import ExpDistribution
 
+from scipy.stats import multivariate_normal
+
+
+def sample(loc, Sigma, n=1):
+    """
+
+    Parameters
+    ----------
+    loc:
+        location parameter
+    Sigma:
+        scale parameter
+    n:
+        number of parameters
+
+    If passing an array of loc and Sigma this function will be repeated for every element.
+
+    Returns
+    -------
+
+    """
+    if len(loc.shape) == 2:
+        return [multivariate_normal.rvs(l, S, size=n) for (l, S) in zip(loc, Sigma)]
+    return multivariate_normal.rvs(loc, Sigma, size=n)
+
 
 class Gaussian(ExpDistribution):
     def __init__(self, nat_param: torch.Tensor):
@@ -79,6 +104,7 @@ class Gaussian(ExpDistribution):
         return pack_dense(eta_2, eta_1)
 
     def rsample(self):
+        """get samples using the re-parameterization trick and natural parameters"""
         loc, scale = self.natural_to_standard()
         eps = torch.randn_like(loc)
         samples = (
