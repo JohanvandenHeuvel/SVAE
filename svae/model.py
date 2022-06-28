@@ -1,4 +1,5 @@
 import os
+import pathlib
 from typing import Tuple
 
 import numpy as np
@@ -20,8 +21,8 @@ from vae import VAE
 
 
 def prior_kld(
-    eta_theta: Tuple[torch.Tensor, torch.Tensor],
-    eta_theta_prior: Tuple[torch.Tensor, torch.Tensor],
+        eta_theta: Tuple[torch.Tensor, torch.Tensor],
+        eta_theta_prior: Tuple[torch.Tensor, torch.Tensor],
 ) -> float:
     dir_params, niw_params = eta_theta
     dir_params_prior, niw_params_prior = eta_theta_prior
@@ -42,12 +43,51 @@ class SVAE:
         self.vae = vae
         self.device = vae.device
 
+        self.eta_theta = None
+
+    def save_model(self):
+        """save model to disk"""
+        path = pathlib.Path().resolve()
+
+        # network
+        self.vae.save_model()
+
+        # global parameters
+        torch.save(self.eta_theta, os.path.join(path, f"eta_theta.pt"))
+
+    def load_model(self):
+        """load model from disk"""
+        path = pathlib.Path().resolve()
+
+        # network
+        self.vae.load_model()
+
+        # global parameters
+        self.eta_theta = torch.load(os.path.join(path, f"eta_theta.pt"))
+
+    def encode(self, y):
+        mu, log_var = self.vae.encode(y)
+        # scale should be positive, and thus it's negative inverse should be negative
+        scale = -torch.exp(0.5 * log_var)
+        potentials = pack_dense(scale, mu)
+        return potentials
+
+    def decode(self, x):
+        return self.vae.decode(x)
+
+    def forward(self, y):
+        potentials = self.encode(y)
+        eta_x, label_stats, _, _ = local_optimization(potentials, self.eta_theta)
+        classes = torch.argmax(label_stats, dim=-1)
+        x = Gaussian(eta_x).rsample()
+        mu_y, log_var_y = self.decode(x)
+        return mu_y, log_var_y, x, classes
+
+
     def save_and_log(self, obs, epoch, save_path, eta_theta):
         with torch.no_grad():
             data = torch.tensor(obs).to(self.vae.device).float()
-            mu, log_var = self.vae.encode(data)
-            scale = -torch.exp(0.5 * log_var)
-            potentials = pack_dense(scale, mu)
+            potentials = self.encode(data)
 
             eta_x, label_stats, _, _ = local_optimization(potentials, eta_theta)
 
@@ -57,7 +97,7 @@ class SVAE:
 
             # get reconstructions
             x = Gaussian(eta_x).rsample()
-            mu_y, log_var_y = self.vae.decode(x)
+            mu_y, log_var_y = self.decode(x)
 
             plot_reconstruction(
                 obs,
@@ -118,14 +158,11 @@ class SVAE:
             total_loss = []
             for i, y in enumerate(dataloader):
                 y = y.float()
+                potentials = self.encode(y)
 
                 # remove dependency on previous iterations
                 eta_theta = (eta_theta[0].detach(), eta_theta[1].detach())
 
-                # Force scale to be positive, and it's negative inverse to be negative
-                mu, log_var = self.vae.encode(y)
-                scale = -torch.exp(0.5 * log_var)
-                potentials = pack_dense(scale, mu)
 
                 """
                 Find local optimum for local variational parameters eta_x, eta_z
@@ -157,7 +194,7 @@ class SVAE:
                 Update encoder/decoder parameters using automatic differentiation
                 """
                 # reconstruction loss
-                mu_y, log_var_y = self.vae.decode(x)
+                mu_y, log_var_y = self.decode(x)
                 recon_loss = num_batches * self.vae.loss_function(y, mu_y, log_var_y)
 
                 # regularization
@@ -182,4 +219,6 @@ class SVAE:
         self.save_and_log(obs, "end", save_path, eta_theta)
 
         print("Finished training of the SVAE")
+        self.eta_theta = eta_theta
+        self.save_model()
         return train_loss
