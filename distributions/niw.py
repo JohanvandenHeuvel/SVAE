@@ -13,6 +13,40 @@ def multidigamma(input, p):
     return result
 
 
+def is_batch(t: torch.Tensor):
+    """Check if tensor t is two-dimensional"""
+    return len(t.shape) == 2
+
+
+def make_batch(t: torch.Tensor):
+    """Add second dimension"""
+    if len(t.shape) > 1:
+        raise ValueError
+    else:
+        return t.unsqueeze(1)
+
+
+def outer_product(x, y):
+    """Computes xyT.
+
+    e.g. if x.shape = (15, 2) and y.shape = (15, 2)
+    then we get that first element of result equals [[x_0 * y_0, x_0 * y_1], [x_1 * y_0, x_1 * y_1]]
+
+    """
+    return torch.einsum("bi, bj -> bij", (x, y))
+
+
+def batch_elementwise_multiplication(x, y):
+    """Computes x * y where the fist dimension is the batch, x is a scalar.
+
+    e.g. x.shape = (15, 1), y.shape = (15, 2, 2)
+    then we get that first element of result equals x[0] * y[0]
+
+    """
+    assert x.shape[1] == 1
+    return torch.einsum("ba, bij -> bij", (x, y))
+
+
 class NormalInverseWishart(ExpDistribution):
     def __init__(self, nat_param):
         super().__init__(nat_param)
@@ -82,9 +116,7 @@ class NormalInverseWishart(ExpDistribution):
 
         kappa = eta_4
         mu_0 = eta_3 / eta_4[..., None]
-        Phi = (
-            eta_2 - torch.einsum("bi,bj->bij", (eta_3, eta_3)) / eta_4[..., None, None]
-        )
+        Phi = eta_2 - outer_product(eta_3, eta_3) / eta_4[..., None, None]
         # nu = eta_1 - p - 2
         nu = eta_1
 
@@ -93,7 +125,13 @@ class NormalInverseWishart(ExpDistribution):
     def standard_to_natural(self, kappa, mu_0, Phi, nu):
         _, p, _ = Phi.shape
 
-        eta_2 = Phi + kappa * torch.einsum("bi,bj->bij", (mu_0, mu_0))
+        """
+        natural_to_standard does not keep the second dimension, so need to add it 
+        """
+        if not is_batch(kappa):
+            kappa = make_batch(kappa)
+
+        eta_2 = Phi + batch_elementwise_multiplication(kappa, outer_product(mu_0, mu_0))
         eta_3 = kappa * mu_0
         eta_4 = kappa
         # eta_1 = nu + p + 2
