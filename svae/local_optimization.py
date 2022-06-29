@@ -45,10 +45,13 @@ def local_optimization(
         potentials: torch.Tensor,
         label_stats: torch.Tensor,
     ) -> Tuple[torch.Tensor, torch.Tensor, float]:
+        # message from child to parent
         gaussian_potentials = torch.tensordot(
             label_stats, gaussian_parameters, [[1], [0]]
         )
+        # update parameters, message from child + message from parent
         eta_x = gaussian_potentials + potentials
+        # message from parent to child
         gaussian_stats = Gaussian(eta_x).expected_stats()
         gaussian_kld = (
             torch.tensordot(potentials, gaussian_stats, 3) - Gaussian(eta_x).logZ()
@@ -60,10 +63,13 @@ def local_optimization(
         label_parameters: torch.Tensor,
         gaussian_stats: torch.Tensor,
     ) -> Tuple[torch.Tensor, torch.Tensor, float]:
+        # message from child to parent
         label_potentials = torch.tensordot(
             gaussian_stats, gaussian_parameters, [[1, 2], [1, 2]]
         )
+        # update parameters, message from child + message from parent
         eta_z = label_potentials + label_parameters
+        # message from parent to child
         label_stats = Categorical(eta_z).expected_stats()
         label_kld = (
             torch.tensordot(label_stats, label_potentials) - Categorical(eta_z).logZ()
