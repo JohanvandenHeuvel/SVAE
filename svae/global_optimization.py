@@ -6,6 +6,22 @@ import torch
 from distributions import NormalInverseWishart
 
 
+def initialize_global_lds_parameters(n, scale=1.0):
+
+    nu = n + 1
+    Phi = 2 * scale * (n + 1) * np.eye(n)
+    mu_0 = np.zeros(n)
+    kappa = 1 / (2 * scale * n)
+
+    M = np.eye(n)
+    K = 1 / (2 * scale * n) * np.eye(n)
+
+    init_state_prior = niw.standard_to_natural(nu, Phi, mu_0, kappa)
+    dynamics_prior = mniw.standard_to_natural(nu, Phi, M, K)
+
+    return init_state_prior, dynamics_prior
+
+
 def initialize_global_parameters(
     K: int, D: int, alpha: float, niw_conc: float, random_scale: float
 ) -> Tuple[torch.Tensor, torch.Tensor]:
