@@ -1,9 +1,13 @@
 from itertools import cycle, islice, chain, combinations
 from typing import Tuple
 
+from distributions import NormalInverseWishart
 from distributions.gaussian import Gaussian
 
 import torch
+import numpy as np
+
+from distributions.mniw import MatrixNormalInverseWishart
 
 
 def roundrobin(*iterables):
@@ -188,9 +192,12 @@ def local_optimization(
 
     Parameters
     ----------
-    potentials
-    eta_theta
-    epochs
+    potentials:
+        Output of the encoder network.
+    eta_theta:
+        Natural global parameters for Q(theta).
+    epochs:
+        Number of epochs to train.
 
     Returns
     -------
@@ -201,24 +208,26 @@ def local_optimization(
     priors 
     """
     niw_param, mniw_param = eta_theta
-    eta_x = (niw.expected_stats(niw_param), mniw.expected_stats(mniw_param))
+    eta_x = (NormalInverseWishart.expected_stats(niw_param), MatrixNormalInverseWishart.expected_stats(mniw_param))
 
     """
     optimize local parameters
     """
-    samples, expected_stats, local_normalizer = natural_lds_inference(eta_x, potentials)
+    gauss_markov_model = GaussMarkov(*eta_x)
+    samples, expected_stats, local_normalizer = gauss_markov_model.inference(potentials)
 
     """
     Statistics
     """
-    global_expected_stats, local_expected_stats = (
-        expected_stats[:-1],
-        expected_stats[-1],
-    )
+    # global_expected_stats, local_expected_stats = (
+    #     expected_stats[:-1],
+    #     expected_stats[-1],
+    # )
 
     """
     KL-Divergence 
     """
-    local_kld = contract(potentials, local_expected_stats) - local_normalizer
+    # local_kld = contract(potentials, local_expected_stats) - local_normalizer
 
-    return samples, global_expected_stats, local_kld
+    # return samples, global_expected_stats, local_kld
+    return None
