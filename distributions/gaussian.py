@@ -1,9 +1,8 @@
 import torch
+from scipy.stats import multivariate_normal
 
 from dense import pack_dense, unpack_dense
 from .distribution import ExpDistribution
-
-from scipy.stats import multivariate_normal
 
 
 def sample(loc, Sigma, n=1):
@@ -55,38 +54,38 @@ class Gaussian(ExpDistribution):
         return pack_dense(E_xxT, E_x, E_n, E_n)
 
     def logZ(self):
-        """normalization constant
-        """
+        def using_standard_parameters():
+            loc, scale = self.natural_to_standard()
+            _, _, a, b = unpack_dense(self.nat_param)
+            """
+            We can do the following which is much more computationally efficient
+                log det (scale) = 2 sum log diag (L)
+            where L is the lower triangular matrix produced by Cholesky decomposition of scale (psd) matrix.
+            """
+            L = torch.linalg.cholesky(scale)
+            value = (
+                2 * torch.sum(torch.log(torch.diagonal(L, dim1=-1, dim2=-2)), dim=-1)
+                + torch.bmm(
+                    loc.unsqueeze(1), torch.bmm(torch.inverse(scale), loc[..., None])
+                ).squeeze()
+                + 2 * (a + b)
+            )
+            return 1 / 2 * torch.sum(value)
 
-        # USING STANDARD PARAMETERS (easier to understand)
-        # loc, scale = self.natural_to_standard()
-        """
-        We can do the following which is much more computationally efficient
-            log det (scale) = 2 sum log diag (L)
-        where L is the lower triangular matrix produced by Cholesky decomposition of scale (psd) matrix.
-        """
-        # L = torch.linalg.cholesky(scale)
-        # value = (
-        #     2 * torch.sum(torch.log(torch.diagonal(L, dim1=-1, dim2=-2)), dim=-1)
-        #     + torch.bmm(
-        #         loc.unsqueeze(1), torch.bmm(torch.inverse(scale), loc[..., None])
-        #     ).squeeze()
-        #     + 2 * (a + b)
-        # )
-        # return 1 / 2 * torch.sum(value)
+        def using_natural_parameters():
+            # TODO I don't understand why there is a (a+b) in the normalization constant.
+            eta_2, eta_1, a, b = unpack_dense(self.nat_param)
 
-        # USING NATURAL PARAMETERS (faster)
-        # TODO I don't understand why there is a (a+b) in the normalization constant.
-        eta_2, eta_1, a, b = unpack_dense(self.nat_param)
+            L = torch.linalg.cholesky(-2 * eta_2)
+            value = (
+                1 / 2 * torch.sum(eta_1 * torch.linalg.solve(-2 * eta_2, eta_1))
+                - torch.sum(torch.log(torch.diagonal(L, dim1=-1, dim2=-2)))
+                + torch.sum(a + b)
+            )
 
-        L = torch.linalg.cholesky(-2 * eta_2)
-        value = (
-            1 / 2 * torch.sum(eta_1 * torch.linalg.solve(-2 * eta_2, eta_1))
-            - torch.sum(torch.log(torch.diagonal(L, dim1=-1, dim2=-2)))
-            + torch.sum(a + b)
-        )
+            return value
 
-        return value
+        return using_natural_parameters()
 
     def natural_to_standard(self):
         eta_2, eta_1, _, _ = unpack_dense(self.nat_param)
