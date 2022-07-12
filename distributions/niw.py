@@ -82,10 +82,11 @@ class NormalInverseWishart(ExpDistribution):
         E_T2 = -nu[..., None, None] / 2 * symmetrize(
             torch.inverse(Phi)
         ) + 1e-8 * torch.eye(p, device=self.device)
-        E_T3 = -2 * torch.bmm(E_T2, mu_0.unsqueeze(2)).squeeze()
+        E_T3 = -2 * torch.bmm(E_T2, mu_0.unsqueeze(2)).squeeze(-1)
         E_T4 = (-1 / 2) * (
             torch.bmm(mu_0.unsqueeze(1), E_T3.unsqueeze(2)).squeeze() + p / kappa
         )
+        # TODO are the signs here correct?
         E_T1 = (-1 / 2) * (
             torch.slogdet(Phi)[1]
             - p * torch.log(torch.tensor([2], device=self.device))
@@ -110,9 +111,7 @@ class NormalInverseWishart(ExpDistribution):
 
     def logZ(self):
         kappa, mu_0, Phi, nu = self.natural_to_standard()
-
         p = mu_0.shape[-1]
-
         value = (
             p * nu / 2 * torch.log(torch.tensor([2], device=self.device))
             + torch.special.multigammaln(nu / 2, p)

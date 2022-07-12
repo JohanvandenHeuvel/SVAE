@@ -38,7 +38,7 @@ class resVAE(VAE):
         log_var_enc_identity = nn.Linear(input_size, latent_dim, bias=False)
 
         mu_enc_identity.weight = nn.Parameter(
-            torch.tensor(rand_partial_isometry(input_size, latent_dim)).float()
+            torch.tensor(rand_partial_isometry(input_size, latent_dim)).float().T
         )
         log_var_enc_identity.weight = nn.Parameter(
             torch.zeros_like(mu_enc_identity.weight)
@@ -69,7 +69,7 @@ class resVAE(VAE):
         log_var_dec_identity = nn.Linear(latent_dim, input_size, bias=False)
 
         mu_dec_identity.weight = nn.Parameter(
-            torch.tensor(rand_partial_isometry(latent_dim, input_size)).float()
+            torch.tensor(rand_partial_isometry(latent_dim, input_size)).float().T
         )
         log_var_dec_identity.weight = nn.Parameter(
             torch.zeros_like(mu_dec_identity.weight)

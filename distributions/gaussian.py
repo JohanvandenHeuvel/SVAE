@@ -28,6 +28,12 @@ def sample(loc, Sigma, n=1):
     return multivariate_normal.rvs(loc, Sigma, size=n)
 
 
+def info_to_natural(J, h):
+    eta_2 = -0.5 * J
+    eta_1 = h
+    return pack_dense(eta_2, eta_1)
+
+
 class Gaussian(ExpDistribution):
     def __init__(self, nat_param: torch.Tensor):
         super().__init__(nat_param)
@@ -102,13 +108,82 @@ class Gaussian(ExpDistribution):
 
         return pack_dense(eta_2, eta_1)
 
+    def info_to_standard(self, J, h):
+        J_inv = torch.inverse(J)
+        scale = J_inv
+        loc = J_inv @ h
+        return loc, scale
+
+    def standard_to_info(self, loc, scale):
+        J = torch.inverse(scale)
+        # h = torch.solve(scale, loc)
+        h = J @ loc
+        return J, h
+
+    def natural_to_info(self):
+        eta_2, eta_1, _, _ = unpack_dense(self.nat_param)
+        J = -2 * eta_2
+        h = eta_1
+        return J, h
+
+    def condition(self, J_obs, h_obs):
+        J, h = self.natural_to_info()
+        J_cond = J + J_obs
+        h_cond = h + h_obs
+        # assert torch.all(torch.linalg.eigvals(-2 * J_cond) > 0)
+        return J_cond, h_cond
+
+    def predict(self, J_obs, h_obs, J11, J12, J22, log_Z, h1, h2):
+        """
+        Prediction using information parameterization.
+
+        Parameters
+        ----------
+        [[J11, J12],
+        [J21, J22]]
+
+        Returns
+        -------
+        """
+
+        def marginalize(J11, J12, J22, h1, h2):
+            J21 = J12.T
+            temp = J21 @ torch.inverse(J11)
+
+            J = J22 - temp @ J21.T
+            h = h2 - temp @ h1.squeeze()
+
+            return J, h
+
+        J, h = self.natural_to_info()
+
+        J_cond, h_cond = self.condition(J_obs, h_obs)
+        J_pred, h_pred = marginalize(
+            J11=(J_cond + J11), J12=J12, J22=J22, h1=(h_cond + h1), h2=h2
+        )
+
+        return (J_cond, h_cond), (J_pred, h_pred)
+
+    def rst_backward(self, cond_msg, pred_msg, pair_params):
+        J, h = self.natural_to_info()
+        J_cond, h_cond = cond_msg
+        J_pred, h_pred = pred_msg
+        J11, J12, J22, _ = pair_params
+
+        temp = J12 @ torch.inverse(J - J_pred + J22)
+        J_smooth = J_cond + J11 - temp @ J12.T
+        # h_smooth = h_cond + h1 - temp @ (h - h_pred + h2)
+        h_smooth = h_cond - temp @ (h - h_pred).squeeze()
+
+        return J_smooth, h_smooth
+
     def rsample(self):
         """get samples using the re-parameterization trick and natural parameters"""
         loc, scale = self.natural_to_standard()
         eps = torch.randn_like(loc)
         samples = (
             loc
-            + torch.matmul(scale, torch.ones(loc.shape[1], device=self.device)) * eps
+            + torch.matmul(scale, torch.ones(scale.shape[1], device=self.device)) * eps
         )
 
         return samples

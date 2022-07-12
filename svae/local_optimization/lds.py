@@ -1,13 +1,18 @@
 from itertools import cycle, islice, chain, combinations
 from typing import Tuple
 
+from dense import unpack_dense, pack_dense
 from distributions import NormalInverseWishart
-from distributions.gaussian import Gaussian
+from distributions.gaussian import Gaussian, info_to_natural
 
 import torch
 import numpy as np
 
 from distributions.mniw import MatrixNormalInverseWishart
+
+
+def is_psd(mat):
+    return bool((mat == mat.T).all() and (torch.eig(mat)[0][:, 0] >= 0).all())
 
 
 def roundrobin(*iterables):
@@ -28,159 +33,6 @@ def roundrobin(*iterables):
         except StopIteration:
             pending -= 1
             nexts = cycle(islice(nexts, pending))
-
-
-class GaussMarkov(Gaussian):
-    """
-    Gauss-Markov model with latents x and observations y
-
-    initial:
-        p(x_0) = N(x_0| m_0, P_0)
-
-    latent:
-        p(x_{t+1} | X_{i <= t}) = N(x_{t+1} | A x_t, Q)
-
-    observations:
-        p(y_i | X) = N(y_i| H x_i, R)
-    """
-
-    def __init__(
-        self,
-        nat_param: torch.Tensor,
-        A: torch.Tensor,
-        Q: torch.Tensor,
-        H: torch.Tensor,
-        R: torch.Tensor,
-    ):
-        super().__init__(nat_param)
-
-        self.A = A  # latent transition matrix
-        self.Q = Q  # latent noise matrix
-        self.H = H  # observation matrix
-        self.R = R  # observation noise
-
-    def inference(self, y):
-
-        parameters = []
-
-        # time step 0
-        loc, scale = self.natural_to_standard()
-        parameters.append((loc, scale))
-
-        # filtering, forward steps
-        for i in range(0, len(y), 1):
-            # get old parameters
-            loc, scale = parameters[i]
-
-            # 1. predict step
-            loc, scale = self.predict(loc, scale)
-
-            # 2. filtering step
-            loc, scale = self.update(loc, scale, y[i])
-
-            # save new parameters
-            parameters.append((loc, scale))
-
-        # smoothing, backward steps
-        for i in range(len(y), 1, -1):
-            # get parameters at step t
-            current_mean, current_cov = parameters[i]
-
-            # get parameters at step t - 1
-            previous_mean, previous_cov = parameters[i - 1]
-
-            # 3. smoothing step
-            loc, scale = self.smooth(
-                previous_mean, current_mean, previous_cov, current_cov
-            )
-
-            # save new smoothed parameters
-            parameters[i] = (loc, scale)
-
-        return parameters
-
-    def smooth(self, previous_mean, current_mean, previous_cov, current_cov):
-        """
-        Rauch Tung Striebel smoother
-
-        Parameters
-        ----------
-        previous_mean:
-            Predictive location at time step t.
-        current_mean:
-            Predictive location at time step t+1.
-        previous_cov:
-            Predictive scale at time step t.
-        current_cov:
-            Predictive scale at time step t+1.
-
-        Returns
-        -------
-
-        """
-        gain = previous_cov @ self.A.T @ np.linalg.inv(current_cov)
-        smoothed_mean = previous_mean + gain @ (current_mean - previous_mean)
-        smoothed_cov = previous_cov + gain @ (current_cov - previous_cov) @ gain.T
-
-        return smoothed_mean, smoothed_cov
-
-    def update(self, loc, scale, y):
-        """
-        Compute conditional
-
-        Parameters
-        ----------
-        loc:
-            Predictive mean at time step t.
-        scale:
-            Predictive scale at time step t.
-        y:
-            Observation at time step t.
-
-        Returns
-        -------
-
-        """
-
-        def using_standard_parameters():
-            residual = y - (self.H @ loc)
-
-            temp = np.dot(scale, self.H.T)
-            gram_matrix = np.dot(self.H, temp) + self.R
-            L = np.linalg.cholesky(gram_matrix)
-
-            gain = solve_triangular(L, temp)
-
-            mu_cond = loc + gain @ residual
-            scale_cond = scale - gain @ self.H @ scale
-
-            return mu_cond, scale_cond
-
-        return using_standard_parameters()
-
-    def predict(self, loc, scale):
-        """
-        Compute the predictive parameters for next time step t+1.
-
-        Parameters
-        ----------
-        loc:
-            Location parameter at time step t.
-        scale:
-            Scale parameter at time step t.
-
-        Returns
-        -------
-        parameters at time step t+1.
-        """
-
-        def using_standard_parameters():
-            predictive_loc = self.A @ loc
-            predictive_scale = self.A @ scale @ self.A.T + self.Q
-
-            return predictive_loc, predictive_scale
-
-        return using_standard_parameters()
 
 
 def local_optimization(
@@ -204,17 +56,84 @@ def local_optimization(
 
     """
 
+    def filter(init_params, pair_params, potentials):
+        state = Gaussian(init_params)  # x_{t}
+        forward_messages = []
+        log_norm = 0
+        for t, (loc, scale) in enumerate(zip(*potentials)):
+
+            # convert potentials to information form
+            J_obs = torch.inverse(scale)
+            h_obs = J_obs @ loc
+
+            # do forward step
+            cond_msg, pred_msg = state.predict(
+                J_obs,
+                h_obs,
+                *pair_params,
+                h1=torch.zeros_like(h_obs),
+                h2=torch.zeros_like(h_obs)
+            )
+            forward_messages.append((cond_msg, pred_msg))
+
+            # set next state
+            state = Gaussian(info_to_natural(*pred_msg))  # x_{t+1}
+
+        return forward_messages, log_norm
+
+    def smooth(forward_messages, pair_params):
+        backward_messages = []
+        state = Gaussian(info_to_natural(*forward_messages[-1][0]))
+        for (cond_msg, pred_msg) in reversed(forward_messages[:1]):
+            J, h = state.rst_backward(cond_msg, pred_msg, pair_params)
+            backward_messages.append((J, h))
+            state = Gaussian(info_to_natural(J, h))
+        return backward_messages
+
+    def sample(forward_messages, pair_params):
+        J11, J12, _, _ = pair_params
+
+        samples = []
+        next_sample = Gaussian(info_to_natural(*forward_messages[-1][0])).rsample()
+        samples.append(next_sample)
+        for ((J_cond, h_cond), _) in reversed(forward_messages[:-1]):
+
+            # get the parameters for the Gaussian we want to sample from
+            state = Gaussian(info_to_natural(J_cond, h_cond))
+            J, h = state.condition(J11, (-1 * J12 @ next_sample.T).T)
+
+            # get the sample
+            state = Gaussian(info_to_natural(J, h))
+            next_sample = state.rsample()
+            samples.append(next_sample)
+
+        return samples
+
+    scale, loc, _, _ = unpack_dense(potentials)
+
     """
     priors 
     """
     niw_param, mniw_param = eta_theta
-    eta_x = (NormalInverseWishart.expected_stats(niw_param), MatrixNormalInverseWishart.expected_stats(mniw_param))
+    init_param = NormalInverseWishart(niw_param).expected_stats()
+    J11, J12, J22, logZ = MatrixNormalInverseWishart(mniw_param).expected_stats()
+
+    # convert from natural to information form
+    J11 *= -2
+    J12 *= -1
+    J22 *= -2
+
+    assert is_psd(J11)
+    assert is_psd(J22)
 
     """
     optimize local parameters
     """
-    gauss_markov_model = GaussMarkov(*eta_x)
-    samples, expected_stats, local_normalizer = gauss_markov_model.inference(potentials)
+    forward_messages, log_norm = filter(
+        init_param, pair_params=(J11, J12, J22, logZ), potentials=(loc, scale)
+    )
+    smooth(forward_messages, pair_params=(J11, J12, J22, logZ))
+    samples = sample(forward_messages, pair_params=(J11, J12, J22, logZ))
 
     """
     Statistics

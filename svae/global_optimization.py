@@ -3,26 +3,33 @@ from typing import Tuple
 import numpy as np
 import torch
 
-from distributions import NormalInverseWishart
+from distributions import NormalInverseWishart, MatrixNormalInverseWishart
 
 
 def initialize_global_lds_parameters(n, scale=1.0):
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-    nu = n + 1
-    Phi = 2 * scale * (n + 1) * np.eye(n)
-    mu_0 = np.zeros(n)
-    kappa = 1 / (2 * scale * n)
+    nu = torch.tensor([n + 1])
+    Phi = 2 * scale * (n + 1) * torch.eye(n)
+    mu_0 = torch.zeros(n)
+    kappa = torch.tensor([1 / (2 * scale * n)])
 
-    M = np.eye(n)
-    K = 1 / (2 * scale * n) * np.eye(n)
+    M = torch.eye(n)
+    K = 1 / (2 * scale * n) * torch.eye(n)
 
-    init_state_prior = niw.standard_to_natural(nu, Phi, mu_0, kappa)
-    dynamics_prior = mniw.standard_to_natural(nu, Phi, M, K)
+    init_state_prior = NormalInverseWishart(torch.zeros_like(nu)).standard_to_natural(
+        kappa.unsqueeze(0), mu_0.unsqueeze(0), Phi.unsqueeze(0), nu.unsqueeze(0)
+    )
+    dynamics_prior = MatrixNormalInverseWishart(
+        torch.zeros_like(nu)
+    ).standard_to_natural(nu, Phi, M, K)
 
-    return init_state_prior, dynamics_prior
+    dynamics_prior = tuple([d.to(device) for d in dynamics_prior])
+
+    return init_state_prior.to(device), dynamics_prior
 
 
-def initialize_global_parameters(
+def initialize_global_gmm_parameters(
     K: int, D: int, alpha: float, niw_conc: float, random_scale: float
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """
