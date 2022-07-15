@@ -1,8 +1,24 @@
 import torch
 from scipy.stats import multivariate_normal
 
+from torch.linalg import solve_triangular, cholesky
+
 from dense import pack_dense, unpack_dense
 from .distribution import ExpDistribution
+
+
+def is_psd(mat):
+    return bool((mat == mat.T).all() and (torch.linalg.eigvals(mat).real >= 0).all())
+
+
+def outer_product(x, y):
+    """Computes xyT"""
+    return torch.einsum("i, j -> ij", (x, y))
+
+
+def batch_matrix_vector_product(A, b):
+    """Computes Ab for batch"""
+    return torch.einsum("bij, bj -> bi", (A, b))
 
 
 def sample(loc, Sigma, n=1):
@@ -31,7 +47,14 @@ def sample(loc, Sigma, n=1):
 def info_to_natural(J, h):
     eta_2 = -0.5 * J
     eta_1 = h
-    return pack_dense(eta_2, eta_1)
+    return pack_dense(eta_2.unsqueeze(0), eta_1.unsqueeze(0))
+
+
+def info_to_standard(J, h):
+    J_inv = torch.inverse(J)
+    scale = J_inv
+    loc = J_inv @ h
+    return loc, scale
 
 
 class Gaussian(ExpDistribution):
@@ -108,12 +131,6 @@ class Gaussian(ExpDistribution):
 
         return pack_dense(eta_2, eta_1)
 
-    def info_to_standard(self, J, h):
-        J_inv = torch.inverse(J)
-        scale = J_inv
-        loc = J_inv @ h
-        return loc, scale
-
     def standard_to_info(self, loc, scale):
         J = torch.inverse(scale)
         # h = torch.solve(scale, loc)
@@ -124,13 +141,13 @@ class Gaussian(ExpDistribution):
         eta_2, eta_1, _, _ = unpack_dense(self.nat_param)
         J = -2 * eta_2
         h = eta_1
-        return J, h
+        return J.squeeze(), h.squeeze()
 
     def condition(self, J_obs, h_obs):
         J, h = self.natural_to_info()
         J_cond = J + J_obs
         h_cond = h + h_obs
-        # assert torch.all(torch.linalg.eigvals(-2 * J_cond) > 0)
+        assert is_psd(J_cond)
         return J_cond, h_cond
 
     def predict(self, J_obs, h_obs, J11, J12, J22, log_Z, h1, h2):
@@ -151,11 +168,12 @@ class Gaussian(ExpDistribution):
             temp = J21 @ torch.inverse(J11)
 
             J = J22 - temp @ J21.T
-            h = h2 - temp @ h1.squeeze()
+            h = h2 - temp @ h1
 
             return J, h
 
-        J, h = self.natural_to_info()
+        assert is_psd(J11)
+        assert is_psd(J22)
 
         J_cond, h_cond = self.condition(J_obs, h_obs)
         J_pred, h_pred = marginalize(
@@ -164,7 +182,7 @@ class Gaussian(ExpDistribution):
 
         return (J_cond, h_cond), (J_pred, h_pred)
 
-    def rst_backward(self, cond_msg, pred_msg, pair_params):
+    def rst_backward(self, cond_msg, pred_msg, pair_params, E_xn):
         J, h = self.natural_to_info()
         J_cond, h_cond = cond_msg
         J_pred, h_pred = pred_msg
@@ -173,9 +191,15 @@ class Gaussian(ExpDistribution):
         temp = J12 @ torch.inverse(J - J_pred + J22)
         J_smooth = J_cond + J11 - temp @ J12.T
         # h_smooth = h_cond + h1 - temp @ (h - h_pred + h2)
-        h_smooth = h_cond - temp @ (h - h_pred).squeeze()
+        h_smooth = h_cond - temp @ (h - h_pred)
 
-        return J_smooth, h_smooth
+        loc, scale = info_to_standard(J_smooth, h_smooth)
+        E_x = loc
+        E_xnxT = temp @ scale + outer_product(E_xn, E_x)
+        E_xxT = scale + outer_product(E_x, E_x)
+
+        stats = (E_x, E_xxT, E_xnxT)
+        return J_smooth, h_smooth, stats
 
     def rsample(self):
         """get samples using the re-parameterization trick and natural parameters"""

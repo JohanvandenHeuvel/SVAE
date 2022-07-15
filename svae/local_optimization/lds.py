@@ -3,7 +3,12 @@ from typing import Tuple
 
 from dense import unpack_dense, pack_dense
 from distributions import NormalInverseWishart
-from distributions.gaussian import Gaussian, info_to_natural
+from distributions.gaussian import (
+    Gaussian,
+    info_to_natural,
+    info_to_standard,
+    outer_product,
+)
 
 import torch
 import numpy as np
@@ -13,26 +18,6 @@ from distributions.mniw import MatrixNormalInverseWishart
 
 def is_psd(mat):
     return bool((mat == mat.T).all() and (torch.eig(mat)[0][:, 0] >= 0).all())
-
-
-def roundrobin(*iterables):
-    """
-    Recipe credited to George Sakkis,
-    see https://code.activestate.com/recipes/528936-roundrobin-generator/?in=user-2591466
-
-    This recipe implements a round-robin generator, a generator that cycles through N iterables until all of them are exhausted:
-    >>> list(roundrobin('abc', [], range(4),  (True,False)))
-    ['a', 0, True, 'b', 1, False, 'c', 2, 3]
-    """
-    pending = len(iterables)
-    nexts = cycle(iter(it).next for it in iterables)
-    while pending:
-        try:
-            for next in nexts:
-                yield next()
-        except StopIteration:
-            pending -= 1
-            nexts = cycle(islice(nexts, pending))
 
 
 def local_optimization(
@@ -57,14 +42,17 @@ def local_optimization(
     """
 
     def filter(init_params, pair_params, potentials):
+        # initialization
         state = Gaussian(init_params)  # x_{t}
+
+        # filtering loop
         forward_messages = []
         log_norm = 0
-        for t, (loc, scale) in enumerate(zip(*potentials)):
+        for loc, scale in zip(*potentials):
 
             # convert potentials to information form
-            J_obs = torch.inverse(scale)
-            h_obs = J_obs @ loc
+            J_obs = -2 * scale
+            h_obs = loc
 
             # do forward step
             cond_msg, pred_msg = state.predict(
@@ -82,25 +70,70 @@ def local_optimization(
         return forward_messages, log_norm
 
     def smooth(forward_messages, pair_params):
-        backward_messages = []
-        state = Gaussian(info_to_natural(*forward_messages[-1][0]))
-        for (cond_msg, pred_msg) in reversed(forward_messages[:1]):
-            J, h = state.rst_backward(cond_msg, pred_msg, pair_params)
-            backward_messages.append((J, h))
-            state = Gaussian(info_to_natural(J, h))
-        return backward_messages
+        # initialization
+        (J_smooth, h_smooth), _ = forward_messages[-1]
+        state = Gaussian(info_to_natural(J_smooth, h_smooth))
+        loc, scale = info_to_standard(J_smooth, h_smooth)
+        E_x = loc
+        E_xxT = scale + outer_product(E_x, E_x)
+        E_xnxT = 0.0
+
+        # smoothing loop
+        expected_stats = [(E_x, E_xxT, E_xnxT)]
+        for i, (cond_msg, pred_msg) in enumerate(reversed(forward_messages[:-1])):
+            E_xn, _, _ = expected_stats[i]
+
+            # do backward step
+            J_smooth, h_smooth, stats = state.rst_backward(
+                cond_msg, pred_msg, pair_params, E_xn
+            )
+            expected_stats.append(stats)
+
+            # set previous state
+            state = Gaussian(info_to_natural(J_smooth, h_smooth))
+
+        return expected_stats
+
+    def process_expected_stats(expected_stats):
+        def make_init_stats(a):
+            E_x, E_xxT, _ = a
+            return E_xxT, E_x, 1.0, 1.0
+
+        def make_pair_stats(a, b):
+            E_x, E_xxT, E_xnxT = a
+            E_xn, E_xnxnT, _ = b
+            return E_xxT, E_xnxT.T, E_xnxnT, 1.0
+
+        def make_node_stats(a):
+            E_x, E_xxT, _ = a
+            return torch.diag(E_xxT), E_x, 1.0
+
+        E_init_stats = make_init_stats(expected_stats[0])
+        E_pair_stats = [
+            make_pair_stats(a, b)
+            for a, b in zip(expected_stats[:-1], expected_stats[1:])
+        ]
+        # same pair for every time step
+        E_pair_stats = [sum(stats) for stats in list(zip(*E_pair_stats))]
+        E_node_stats = [make_node_stats(a) for a in expected_stats]
+        E_node_stats = list(zip(*E_node_stats))
+
+        return E_init_stats, E_pair_stats, E_node_stats
 
     def sample(forward_messages, pair_params):
         J11, J12, _, _ = pair_params
 
-        samples = []
-        next_sample = Gaussian(info_to_natural(*forward_messages[-1][0])).rsample()
-        samples.append(next_sample)
+        # initialization
+        (J_cond, h_cond), _ = forward_messages[-1]
+        next_sample = Gaussian(info_to_natural(J_cond, h_cond)).rsample()
+
+        # sampling loop
+        samples = [next_sample]
         for ((J_cond, h_cond), _) in reversed(forward_messages[:-1]):
 
             # get the parameters for the Gaussian we want to sample from
             state = Gaussian(info_to_natural(J_cond, h_cond))
-            J, h = state.condition(J11, (-1 * J12 @ next_sample.T).T)
+            J, h = state.condition(J11, (-J12 @ next_sample.T).T.squeeze())
 
             # get the sample
             state = Gaussian(info_to_natural(J, h))
@@ -132,7 +165,8 @@ def local_optimization(
     forward_messages, log_norm = filter(
         init_param, pair_params=(J11, J12, J22, logZ), potentials=(loc, scale)
     )
-    smooth(forward_messages, pair_params=(J11, J12, J22, logZ))
+    expected_stats = smooth(forward_messages, pair_params=(J11, J12, J22, logZ))
+    expected_stats = process_expected_stats(list(reversed(expected_stats)))
     samples = sample(forward_messages, pair_params=(J11, J12, J22, logZ))
 
     """
