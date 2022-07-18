@@ -163,10 +163,9 @@ class SVAE:
                 )
 
                 # do SGD on the natural gradient
-                step_size = 1
                 eta_theta = tuple(
                     [
-                        gradient_descent(eta_theta[i], nat_grad[i], step_size)
+                        gradient_descent(eta_theta[i], nat_grad[i], step_size=1)
                         for i in range(len(eta_theta))
                     ]
                 )
