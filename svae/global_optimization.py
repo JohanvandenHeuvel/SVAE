@@ -3,10 +3,10 @@ from typing import Tuple
 import numpy as np
 import torch
 
-from distributions import NormalInverseWishart
+from distributions import NormalInverseWishart, Dirichlet, exponential_kld
 
 
-def initialize_global_parameters(
+def initialize_global_gmm_parameters(
     K: int, D: int, alpha: float, niw_conc: float, random_scale: float
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """
@@ -96,3 +96,21 @@ def natural_gradient(
         nat_grad(eta_theta_prior[1], eta_theta[1], stats[1]),
     )
     return value
+
+
+def prior_kld_gmm(
+    eta_theta: Tuple[torch.Tensor, torch.Tensor],
+    eta_theta_prior: Tuple[torch.Tensor, torch.Tensor],
+) -> float:
+    dir_params, niw_params = eta_theta
+    dir_params_prior, niw_params_prior = eta_theta_prior
+
+    dir = Dirichlet(dir_params)
+    dir_prior = Dirichlet(dir_params_prior)
+    dir_kld = exponential_kld(dir, dir_prior)
+
+    niw = NormalInverseWishart(niw_params)
+    niw_prior = NormalInverseWishart(niw_params_prior)
+    niw_kld = exponential_kld(niw, niw_prior)
+
+    return dir_kld + niw_kld

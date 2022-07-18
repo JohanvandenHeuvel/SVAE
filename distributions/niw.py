@@ -28,7 +28,7 @@ def make_batch(t: torch.Tensor):
         return t.unsqueeze(1)
 
 
-def outer_product(x, y):
+def batch_outer_product(x, y):
     """Computes xyT.
 
     e.g. if x.shape = (15, 2) and y.shape = (15, 2)
@@ -128,7 +128,7 @@ class NormalInverseWishart(ExpDistribution):
 
         kappa = eta_4
         mu_0 = eta_3 / eta_4[..., None]
-        Phi = eta_2 - outer_product(eta_3, eta_3) / eta_4[..., None, None]
+        Phi = eta_2 - batch_outer_product(eta_3, eta_3) / eta_4[..., None, None]
         # nu = eta_1 - p - 2
         nu = eta_1
 
@@ -143,7 +143,7 @@ class NormalInverseWishart(ExpDistribution):
         if not is_batch(kappa):
             kappa = make_batch(kappa)
 
-        eta_2 = Phi + batch_elementwise_multiplication(kappa, outer_product(mu_0, mu_0))
+        eta_2 = Phi + batch_elementwise_multiplication(kappa, batch_outer_product(mu_0, mu_0))
         eta_3 = kappa * mu_0
         eta_4 = kappa
         # eta_1 = nu + p + 2

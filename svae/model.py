@@ -1,6 +1,5 @@
 import os
 import pathlib
-from typing import Tuple
 
 import numpy as np
 import torch
@@ -10,32 +9,19 @@ from tqdm import tqdm
 from dense import pack_dense, unpack_dense
 from distributions import (
     Gaussian,
-    NormalInverseWishart,
-    Dirichlet,
-    exponential_kld,
 )
-from plot.plot import plot_reconstruction
-from svae.local_optimization import local_optimization
-from svae.global_optimization import natural_gradient, initialize_global_parameters
+from plot.gmm_plot import plot_reconstruction
+from svae.local_optimization.gmm import local_optimization
+from svae.global_optimization import (
+    natural_gradient,
+    initialize_global_gmm_parameters,
+    prior_kld_gmm,
+)
 from vae import VAE
 
 
-def prior_kld(
-    eta_theta: Tuple[torch.Tensor, torch.Tensor],
-    eta_theta_prior: Tuple[torch.Tensor, torch.Tensor],
-) -> float:
-    dir_params, niw_params = eta_theta
-    dir_params_prior, niw_params_prior = eta_theta_prior
-
-    dir = Dirichlet(dir_params)
-    dir_prior = Dirichlet(dir_params_prior)
-    dir_kld = exponential_kld(dir, dir_prior)
-
-    niw = NormalInverseWishart(niw_params)
-    niw_prior = NormalInverseWishart(niw_params_prior)
-    niw_kld = exponential_kld(niw, niw_prior)
-
-    return dir_kld + niw_kld
+def gradient_descent(w, grad_w, step_size):
+    return w - step_size * grad_w
 
 
 class SVAE:
@@ -141,10 +127,10 @@ class SVAE:
         num_batches = len(dataloader)
 
         _, D = data.shape
-        eta_theta_prior = initialize_global_parameters(
+        eta_theta_prior = initialize_global_gmm_parameters(
             K, D, alpha=0.05 / K, niw_conc=1.0, random_scale=0.0
         )
-        eta_theta = initialize_global_parameters(
+        eta_theta = initialize_global_gmm_parameters(
             K, D, alpha=1.0, niw_conc=1.0, random_scale=3.0
         )
 
@@ -180,10 +166,9 @@ class SVAE:
                 )
 
                 # do SGD on the natural gradient
-                step_size = 10
                 eta_theta = tuple(
                     [
-                        eta_theta[i] - step_size * nat_grad[i]
+                        gradient_descent(eta_theta[i], nat_grad[i], step_size=10)
                         for i in range(len(eta_theta))
                     ]
                 )
@@ -196,7 +181,7 @@ class SVAE:
                 recon_loss = num_batches * self.vae.loss_function(y, mu_y, log_var_y)
 
                 # regularization
-                global_kld = prior_kld(eta_theta, eta_theta_prior)
+                global_kld = prior_kld_gmm(eta_theta, eta_theta_prior)
                 kld_loss = (global_kld + num_batches * local_kld) / len(y)
 
                 # loss is a combination of above two
