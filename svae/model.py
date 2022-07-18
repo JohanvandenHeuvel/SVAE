@@ -63,9 +63,8 @@ class SVAE:
 
     def forward(self, y):
         potentials = self.encode(y)
-        eta_x, label_stats, _, _ = local_optimization(potentials, self.eta_theta)
+        x, eta_x, label_stats, _, _ = local_optimization(potentials, self.eta_theta)
         classes = torch.argmax(label_stats, dim=-1)
-        x = Gaussian(eta_x).rsample()
         mu_y, log_var_y = self.decode(x)
         return mu_y, log_var_y, x, classes
 
@@ -74,14 +73,13 @@ class SVAE:
             data = torch.tensor(obs).to(self.vae.device).float()
             potentials = self.encode(data)
 
-            eta_x, label_stats, _, _ = local_optimization(potentials, eta_theta)
+            x, eta_x, label_stats, _, _ = local_optimization(potentials, eta_theta)
 
             # get encoded means
             gaussian_stats = Gaussian(eta_x).expected_stats()
             _, Ex, _, _ = unpack_dense(gaussian_stats)
 
             # get reconstructions
-            x = Gaussian(eta_x).rsample()
             mu_y, log_var_y = self.decode(x)
 
             plot_reconstruction(
@@ -151,12 +149,9 @@ class SVAE:
                 """
                 Find local optimum for local variational parameters eta_x, eta_z
                 """
-                eta_x, _, prior_stats, local_kld = local_optimization(
+                x, eta_x, _, prior_stats, local_kld = local_optimization(
                     potentials, eta_theta
                 )
-
-                # get the latents using the eta_x parameters we just optimized
-                x = Gaussian(eta_x).rsample()
 
                 """
                 Update global variational parameter eta_theta using natural gradient
