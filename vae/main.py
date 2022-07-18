@@ -5,7 +5,7 @@ from sklearn.preprocessing import StandardScaler
 from data import make_pinwheel_data
 from log import make_folder, save_dict
 from models import resVAE
-from plot.plot import plot_loss
+from plot.gmm_plot import plot_loss
 
 hyperparameters = {
     "VAE_parameters": {

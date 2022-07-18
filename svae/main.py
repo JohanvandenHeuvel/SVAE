@@ -3,15 +3,16 @@ import os
 from vae import resVAE, VAE
 
 from log import make_folder, save_dict
-from plot.plot import plot_loss
-from data import make_pinwheel_data, make_two_cluster_data
+from plot.gmm_plot import plot_loss
+from data import make_pinwheel_data, make_two_cluster_data, make_dot_data
 from svae import SVAE
 from sklearn.preprocessing import StandardScaler
 
+import matplotlib.pyplot as plt
+
 hyperparameters = {
     "VAE_parameters": {
-        "latent_dim": 2,
-        "input_size": 2,
+        "latent_dim": 10,
         "hidden_size": 40,
         "recon_loss": "likelihood",
         "name": "vae",
@@ -27,7 +28,7 @@ hyperparameters = {
     "SVAE_train_parameters": {
         "K": 15,
         "batch_size": 50,
-        "epochs": 1000,
+        "epochs": 10,
         "kld_weight": 0.35,
     },
 }
@@ -35,16 +36,15 @@ hyperparameters = {
 
 def get_data():
     # generate synthetic data
-    data = make_pinwheel_data(**hyperparameters["pinwheel_data_parameters"])
+    # data = make_pinwheel_data(**hyperparameters["pinwheel_data_parameters"])
     # data = make_two_cluster_data(100)
-    # scaler = StandardScaler()
-    # scaler.fit(data)
-    # data = scaler.transform(data)
+    data = make_dot_data(image_width=20, T=500, num_steps=5000, v=0.75, render_sigma=0.15, noise_sigma=0.1)
     return data
 
 
 def get_network(data, save_path):
-    network = resVAE(**hyperparameters["VAE_parameters"])
+    _, input_size = data.shape
+    network = resVAE(input_size=input_size, **hyperparameters["VAE_parameters"])
     # train_loss = network.fit(
     #     data, save_path=save_path, **hyperparameters["VAE_train_parameters"]
     # )
@@ -57,6 +57,7 @@ def main():
     save_dict(hyperparameters, save_path=folder_name, name="hyperparameters")
 
     data = get_data()
+
     network = get_network(data, save_path=os.path.join(folder_name, "vae"))
 
     model = SVAE(network)

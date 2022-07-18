@@ -51,11 +51,13 @@ class ExpDistribution(ABC):
         self._nat_param = value
 
 
-def exponential_kld(dist_1: ExpDistribution, dist_2: ExpDistribution) -> float:
+def exponential_kld(dist_1: ExpDistribution, dist_2: ExpDistribution, expected_stats=None) -> float:
+    if expected_stats is None:
+        expected_stats = dist_1.expected_stats()
     # TODO sometimes gives negative values
     value = (
         torch.flatten((dist_1.nat_param - dist_2.nat_param))
-        @ torch.flatten(dist_1.expected_stats())
+        @ torch.flatten(expected_stats)
         - dist_1.logZ()
         + dist_2.logZ()
     )

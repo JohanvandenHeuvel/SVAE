@@ -7,7 +7,7 @@ import torch.nn as nn
 from torch.nn import functional as F
 from tqdm import tqdm
 
-from plot.plot import plot_reconstruction
+from plot.gmm_plot import plot_reconstruction
 
 
 def init_weights(l):

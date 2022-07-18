@@ -3,7 +3,12 @@ from typing import Tuple
 import numpy as np
 import torch
 
-from distributions import NormalInverseWishart, MatrixNormalInverseWishart
+from distributions import (
+    NormalInverseWishart,
+    MatrixNormalInverseWishart,
+    Dirichlet,
+    exponential_kld,
+)
 
 
 def initialize_global_lds_parameters(n, scale=1.0):
@@ -112,10 +117,50 @@ def natural_gradient(
     """
 
     def nat_grad(prior, posterior, s) -> torch.Tensor:
+        if isinstance(prior, Tuple):
+            return [
+                -1.0 / N * prior[j] - posterior[j] + num_batches * s[j]
+                for j in range(len(prior))
+            ]
         return -1.0 / N * (prior - posterior + num_batches * s)
 
-    value = (
-        nat_grad(eta_theta_prior[0], eta_theta[0], stats[0]),
-        nat_grad(eta_theta_prior[1], eta_theta[1], stats[1]),
-    )
+    value = [
+        nat_grad(eta_theta_prior[i], eta_theta[i], stats[i])
+        for i in range(len(eta_theta))
+    ]
     return value
+
+
+def prior_kld_lds(eta_theta, eta_theta_prior, eta_x):
+    niw_params, mniw_params = eta_theta
+    niw_params_prior, mniw_params_prior = eta_theta_prior
+
+    niw = NormalInverseWishart(niw_params)
+    niw_prior = NormalInverseWishart(niw_params_prior)
+    # niw_kld = exponential_kld(niw, niw_prior, eta_x[0])
+    niw_kld = exponential_kld(niw, niw_prior)
+
+    mniw = MatrixNormalInverseWishart(mniw_params)
+    mniw_prior = MatrixNormalInverseWishart(mniw_params_prior)
+    # mniw_kld = exponential_kld(mniw, mniw_prior, eta_x[1])
+    mniw_kld = exponential_kld(mniw, mniw_prior)
+
+    return mniw_kld + niw_kld
+
+
+def prior_kld_gmm(
+    eta_theta: Tuple[torch.Tensor, torch.Tensor],
+    eta_theta_prior: Tuple[torch.Tensor, torch.Tensor],
+) -> float:
+    dir_params, niw_params = eta_theta
+    dir_params_prior, niw_params_prior = eta_theta_prior
+
+    dir = Dirichlet(dir_params)
+    dir_prior = Dirichlet(dir_params_prior)
+    dir_kld = exponential_kld(dir, dir_prior)
+
+    niw = NormalInverseWishart(niw_params)
+    niw_prior = NormalInverseWishart(niw_params_prior)
+    niw_kld = exponential_kld(niw, niw_prior)
+
+    return dir_kld + niw_kld

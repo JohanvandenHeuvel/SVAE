@@ -8,34 +8,24 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from dense import pack_dense, unpack_dense
-from distributions import (
-    Gaussian,
-    NormalInverseWishart,
-    Dirichlet,
-    exponential_kld,
+from distributions import Gaussian
+from plot import gmm_plot
+
+# from svae.local_optimization.gmm import local_optimization
+from svae.local_optimization.lds import local_optimization
+from svae.global_optimization import (
+    natural_gradient,
+    initialize_global_lds_parameters,
+    prior_kld_gmm,
+    prior_kld_lds,
 )
-from plot.plot import plot_reconstruction
-from svae.local_optimization import local_optimization
-from svae.global_optimization import natural_gradient, initialize_global_parameters
 from vae import VAE
 
 
-def prior_kld(
-    eta_theta: Tuple[torch.Tensor, torch.Tensor],
-    eta_theta_prior: Tuple[torch.Tensor, torch.Tensor],
-) -> float:
-    dir_params, niw_params = eta_theta
-    dir_params_prior, niw_params_prior = eta_theta_prior
-
-    dir = Dirichlet(dir_params)
-    dir_prior = Dirichlet(dir_params_prior)
-    dir_kld = exponential_kld(dir, dir_prior)
-
-    niw = NormalInverseWishart(niw_params)
-    niw_prior = NormalInverseWishart(niw_params_prior)
-    niw_kld = exponential_kld(niw, niw_prior)
-
-    return dir_kld + niw_kld
+def gradient_descent(w, grad_w, step_size):
+    if isinstance(w, Tuple):
+        return [w[i] - step_size * grad_w[i] for i in range(len(w))]
+    return w - step_size * grad_w
 
 
 class SVAE:
@@ -98,7 +88,7 @@ class SVAE:
             x = Gaussian(eta_x).rsample()
             mu_y, log_var_y = self.decode(x)
 
-            plot_reconstruction(
+            gmm_plot.plot_reconstruction(
                 obs=obs,
                 mu=mu_y.cpu().detach().numpy(),
                 log_var=log_var_y.cpu().detach().numpy(),
@@ -141,12 +131,8 @@ class SVAE:
         num_batches = len(dataloader)
 
         _, D = data.shape
-        eta_theta_prior = initialize_global_parameters(
-            K, D, alpha=0.05 / K, niw_conc=1.0, random_scale=0.0
-        )
-        eta_theta = initialize_global_parameters(
-            K, D, alpha=1.0, niw_conc=1.0, random_scale=3.0
-        )
+        eta_theta_prior = initialize_global_lds_parameters(10)
+        eta_theta = initialize_global_lds_parameters(10)
 
         optimizer = torch.optim.Adam(self.vae.parameters(), lr=1e-3, weight_decay=0.001)
 
@@ -160,17 +146,14 @@ class SVAE:
                 potentials = self.encode(y)
 
                 # remove dependency on previous iterations
-                eta_theta = (eta_theta[0].detach(), eta_theta[1].detach())
+                eta_theta = (eta_theta[0].detach(), tuple([e.detach() for e in eta_theta[1]]))
 
                 """
                 Find local optimum for local variational parameters eta_x, eta_z
                 """
-                eta_x, _, prior_stats, local_kld = local_optimization(
+                eta_x, x, prior_stats, local_kld = local_optimization(
                     potentials, eta_theta
                 )
-
-                # get the latents using the eta_x parameters we just optimized
-                x = Gaussian(eta_x).rsample()
 
                 """
                 Update global variational parameter eta_theta using natural gradient
@@ -180,10 +163,10 @@ class SVAE:
                 )
 
                 # do SGD on the natural gradient
-                step_size = 10
+                step_size = 1
                 eta_theta = tuple(
                     [
-                        eta_theta[i] - step_size * nat_grad[i]
+                        gradient_descent(eta_theta[i], nat_grad[i], step_size)
                         for i in range(len(eta_theta))
                     ]
                 )
@@ -196,11 +179,13 @@ class SVAE:
                 recon_loss = num_batches * self.vae.loss_function(y, mu_y, log_var_y)
 
                 # regularization
-                global_kld = prior_kld(eta_theta, eta_theta_prior)
-                kld_loss = (global_kld + num_batches * local_kld) / len(y)
+                # global_kld = prior_kld_gmm(eta_theta, eta_theta_prior)
+                # global_kld = prior_kld_lds(eta_theta, eta_theta_prior, eta_x)
+                # kld_loss = (global_kld + num_batches * local_kld) / len(y)
 
                 # loss is a combination of above two
-                loss = recon_loss + kld_weight * kld_loss
+                # loss = recon_loss + kld_weight * kld_loss
+                loss = recon_loss
 
                 optimizer.zero_grad()
                 # compute gradients
@@ -208,13 +193,14 @@ class SVAE:
                 # update parameters
                 optimizer.step()
 
-                total_loss.append((recon_loss.item(), kld_weight * kld_loss))
+                # total_loss.append((recon_loss.item(), kld_weight * kld_loss))
+                total_loss.append((recon_loss.item()))
             train_loss.append(np.mean(total_loss, axis=0))
 
-            if epoch % max((epochs // 10), 1) == 0:
-                self.save_and_log(obs, epoch, save_path, eta_theta)
+            # if epoch % max((epochs // 10), 1) == 0:
+            #     self.save_and_log(obs, epoch, save_path, eta_theta)
 
-        self.save_and_log(obs, "end", save_path, eta_theta)
+        # self.save_and_log(obs, "end", save_path, eta_theta)
 
         print("Finished training of the SVAE")
         self.eta_theta = eta_theta

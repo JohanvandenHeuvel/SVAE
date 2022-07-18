@@ -1,12 +1,10 @@
 import os
 
-import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
 
 from distributions import Dirichlet, NormalInverseWishart, Gaussian
-
 
 cm = plt.get_cmap("tab20")
 
@@ -219,5 +217,6 @@ def _plot_scatter(ax, data, c=None, alpha=0.7, title=None):
             mask = c == value
             ax.scatter(x[mask], y[mask], color=cm.colors[value], label=f"{value}")
     else:
-        ax.scatter(x, y, c="black", alpha=alpha)
+        # ax.scatter(x, y, c="black", alpha=alpha)
+        ax.scatter(x, y, alpha=alpha)
     ax.set_title(title)
