@@ -26,7 +26,7 @@ def local_optimization(
     potentials: torch.Tensor,
     eta_theta: Tuple[torch.Tensor, torch.Tensor],
     epochs: int = 100,
-) -> Tuple[torch.Tensor, torch.Tensor, Tuple[torch.Tensor, torch.Tensor], float]:
+):
     """
     Find the optimum for local variational parameters eta_x, eta_z
 
@@ -132,4 +132,7 @@ def local_optimization(
     niw_stats = torch.tensordot(label_stats, gaussian_stats, [[0], [0]])
     prior_stats = dirichlet_stats, niw_stats
 
-    return eta_x, label_stats, prior_stats, local_kld
+    # get the latents using the eta_x parameters we just optimized
+    samples = Gaussian(eta_x).rsample()
+
+    return samples, eta_x, label_stats, prior_stats, local_kld
