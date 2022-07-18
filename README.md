@@ -19,11 +19,12 @@ Re-implementation of [Composing graphical models with neural networks for struct
 │   └── niw.py
 ├── log.py                      # functions to help saving information
 ├── plot                        # plotting functionality
-│   └── plot.py                 
+│   └── gmm_plot.py                 
 ├── README.md
 ├── svae                        # contains svae specific code 
 │   ├── global_optimization.py  # code for optimizing global variables
-│   ├── local_optimization.py   # code for optimizing local variables
+│   ├── local optimization      # code for optimizing local variables
+│   │   └── gmm.py   
 │   ├── main.py                 # code to just run svae
 │   └── model.py                # contains the svae algorithm
 └── vae                         # contains generic variational autoencoder code

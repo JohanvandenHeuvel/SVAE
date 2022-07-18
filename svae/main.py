@@ -3,7 +3,7 @@ import os
 from vae import resVAE, VAE
 
 from log import make_folder, save_dict
-from plot.plot import plot_loss
+from plot.gmm_plot import plot_loss
 from data import make_pinwheel_data, make_two_cluster_data
 from svae import SVAE
 from sklearn.preprocessing import StandardScaler
