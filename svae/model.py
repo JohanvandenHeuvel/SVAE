@@ -2,21 +2,20 @@ import os
 import pathlib
 from typing import Tuple
 
+import matplotlib.pyplot as plt
+
 import numpy as np
 import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from dense import pack_dense, unpack_dense
-from distributions import Gaussian
-from plot import gmm_plot
+from plot import lds_plot
 
-# from svae.local_optimization.gmm import local_optimization
 from svae.local_optimization.lds import local_optimization
 from svae.global_optimization import (
     natural_gradient,
     initialize_global_lds_parameters,
-    prior_kld_gmm,
     prior_kld_lds,
 )
 from vae import VAE
@@ -67,37 +66,49 @@ class SVAE:
 
     def forward(self, y):
         potentials = self.encode(y)
-        eta_x, label_stats, _, _ = local_optimization(potentials, self.eta_theta)
-        classes = torch.argmax(label_stats, dim=-1)
-        x = Gaussian(eta_x).rsample()
+        x, eta_x, _, _ = local_optimization(potentials, self.eta_theta)
         mu_y, log_var_y = self.decode(x)
-        return mu_y, log_var_y, x, classes
+        return mu_y, log_var_y, x
 
     def save_and_log(self, obs, epoch, save_path, eta_theta):
         with torch.no_grad():
+            # only use a subset of the data for plotting
             data = torch.tensor(obs).to(self.vae.device).float()
+            data = data[:100]
+
+            # set the observations to zero after prefix
+            prefix = 25
             potentials = self.encode(data)
+            scale, loc, _, _ = unpack_dense(potentials)
+            loc[prefix:] = 0.0
+            scale[prefix:] = 0.0
+            potentials = pack_dense(scale, loc)
 
-            eta_x, label_stats, _, _ = local_optimization(potentials, eta_theta)
+            # get samples
+            samples = []
+            for i in range(5):
+                # samples
+                sample, _, _, _ = local_optimization(potentials, eta_theta, num_samples=1)
+                # reconstruction
+                y, _ = self.decode(sample.squeeze())
+                # save
+                samples.append(y)
+            mean_image = torch.stack(samples).mean(0)
+            samples = torch.hstack(samples)
 
-            # get encoded means
-            gaussian_stats = Gaussian(eta_x).expected_stats()
-            _, Ex, _, _ = unpack_dense(gaussian_stats)
+            big_image = torch.hstack((data, mean_image, samples))
+            big_image = big_image.cpu().detach().numpy()
 
-            # get reconstructions
-            x = Gaussian(eta_x).rsample()
-            mu_y, log_var_y = self.decode(x)
+            fig, ax = plt.subplots()
+            ax.matshow(big_image, cmap="gray")
+            ax.plot([-0.5, big_image.shape[1]], [prefix-0.5, prefix-0.5], 'r', linewidth=2)
+            ax.autoscale(False)
+            ax.axis("off")
 
-            gmm_plot.plot_reconstruction(
-                obs=obs,
-                mu=mu_y.cpu().detach().numpy(),
-                log_var=log_var_y.cpu().detach().numpy(),
-                latent=Ex.cpu().detach().numpy(),
-                eta_theta=eta_theta,
-                classes=torch.argmax(label_stats, dim=-1).cpu().detach().numpy(),
-                title=f"epoch:{epoch}_svae",
-                save_path=save_path,
-            )
+            fig.tight_layout()
+            plt.show()
+
+            print("Fuck yeah!")
 
     def fit(self, obs, epochs, batch_size, K, kld_weight, save_path=None):
         """
@@ -137,7 +148,7 @@ class SVAE:
         optimizer = torch.optim.Adam(self.vae.parameters(), lr=1e-3, weight_decay=0.001)
 
         train_loss = []
-        # self.save_and_log(obs, "pre", save_path, eta_theta)
+        self.save_and_log(obs, "pre", save_path, eta_theta)
         for epoch in tqdm(range(epochs + 1)):
 
             total_loss = []
@@ -151,7 +162,7 @@ class SVAE:
                 """
                 Find local optimum for local variational parameters eta_x, eta_z
                 """
-                eta_x, x, prior_stats, local_kld = local_optimization(
+                x, eta_x, prior_stats, local_kld = local_optimization(
                     potentials, eta_theta
                 )
 

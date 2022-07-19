@@ -201,13 +201,16 @@ class Gaussian(ExpDistribution):
         stats = (E_x, E_xxT, E_xnxT)
         return J_smooth, h_smooth, stats
 
-    def rsample(self):
+    def rsample(self, num_samples):
         """get samples using the re-parameterization trick and natural parameters"""
         loc, scale = self.natural_to_standard()
-        eps = torch.randn_like(loc)
-        samples = (
-            loc
-            + torch.matmul(scale, torch.ones(scale.shape[1], device=self.device)) * eps
-        )
+        n = scale.shape[1]
+
+        # get random part
+        eps = torch.randn((num_samples, n), device=self.device)
+
+        # de-diagonalize scale
+        scale = torch.matmul(scale, torch.ones(n, device=self.device))
+        samples = loc + scale * eps
 
         return samples

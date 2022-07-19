@@ -13,7 +13,7 @@ from distributions.gaussian import (
 
 
 def is_psd(mat):
-    return bool((mat == mat.T).all() and (torch.eig(mat)[0][:, 0] >= 0).all())
+    return bool((mat == mat.T).all() and (torch.linalg.eigvals(mat).real >= 0).all())
 
 
 def filter(init_params, pair_params, potentials):
@@ -127,12 +127,12 @@ def process_expected_stats(expected_stats):
     return E_init_stats, E_pair_stats, E_node_stats
 
 
-def sample(forward_messages, pair_params):
+def sample(forward_messages, pair_params, num_samples=1):
     J11, J12, _, _ = pair_params
 
     # initialization
     (J_cond, h_cond), _ = forward_messages[-1]
-    next_sample = Gaussian(info_to_natural(J_cond, h_cond)).rsample()
+    next_sample = Gaussian(info_to_natural(J_cond, h_cond)).rsample(num_samples)
 
     # sampling loop
     samples = [next_sample]
@@ -144,14 +144,14 @@ def sample(forward_messages, pair_params):
 
         # get the sample
         state = Gaussian(info_to_natural(J, h))
-        next_sample = state.rsample()
+        next_sample = state.rsample(num_samples)
         samples.append(next_sample)
 
     return torch.stack(samples)
 
 
 def local_optimization(
-    potentials: torch.Tensor, eta_theta: Tuple[torch.Tensor, torch.Tensor],
+    potentials: torch.Tensor, eta_theta: Tuple[torch.Tensor, torch.Tensor], num_samples=1
 ):
     """
 
@@ -161,6 +161,8 @@ def local_optimization(
         Output of the encoder network.
     eta_theta:
         Natural global parameters for Q(theta).
+    num_samples:
+        Number of samples
 
     Returns
     -------
@@ -195,7 +197,7 @@ def local_optimization(
     )
     expected_stats = smooth(forward_messages, pair_params=(J11, J12, J22, logZ))
     expected_stats = process_expected_stats(list(reversed(expected_stats)))
-    samples = sample(forward_messages, pair_params=(J11, J12, J22, logZ))
+    samples = sample(forward_messages, pair_params=(J11, J12, J22, logZ), num_samples=num_samples)
 
     """
     Statistics
@@ -220,4 +222,4 @@ def local_optimization(
     """
     local_kld = torch.tensordot(potentials, local_expected_stats, 3) - log_norm
 
-    return eta_x, samples, global_expected_stats, local_kld
+    return samples, eta_x, global_expected_stats, local_kld
