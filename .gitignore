@@ -277,3 +277,5 @@ fabric.properties
 # experimental results
 results
 
+# saved model files
+*.pt
