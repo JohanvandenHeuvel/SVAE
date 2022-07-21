@@ -1,104 +1,80 @@
-from typing import Tuple
-
 import torch
+from matplotlib import pyplot as plt
 
-from dense import unpack_dense, pack_dense
-from distributions import NormalInverseWishart, MatrixNormalInverseWishart
+from distributions import MatrixNormalInverseWishart, NormalInverseWishart
 from distributions.gaussian import (
+    info_to_standard,
     Gaussian,
     info_to_natural,
-    info_to_standard,
-    outer_product,
+    natural_to_info,
 )
 
-
-def is_psd(mat):
-    return bool((mat == mat.T).all() and (torch.linalg.eigvals(mat).real >= 0).all())
+device = "cuda:0"
 
 
-def filter(init_params, pair_params, potentials):
-    """
-    Kalman filtering using information form.
+def outer_product(x, y):
+    # computes xyT
+    return torch.einsum("i, j -> ij", (x, y))
 
-    Parameters
-    ----------
-    init_params:
-        Initial state.
-    pair_params:
-        Transition mechanics.
-    potentials:
-        Observations.
 
-    Returns
-    -------
+def info_condition(J, h, J_obs, h_obs):
+    return J + J_obs, h + h_obs
 
-    """
-    # initialization
-    state = Gaussian(init_params)  # x_{t}
 
-    # filtering loop
+def condition(J, h, y, Jxx, Jxy):
+    J_cond = J + Jxx
+    h_cond = h + (Jxy @ y.T).T
+    return J_cond, h_cond
+
+
+def info_marginalize(J11, J12, J22, h):
+    # J11_inv = torch.inverse(J11)
+    # temp = J12.T @ J11_inv
+    temp = torch.linalg.solve(J11, J12)
+
+    # J_pred = J22 - J12.T @ inv(J11) @ J12
+    J_pred = J22 - temp @ J12
+    # h_pred = h2 - J12.T @ inv(J11) @ h1
+    h_pred = -temp @ h
+
+    return J_pred, h_pred
+
+
+def info_predict(J, h, J11, J12, J22):
+    J_new = J + J11
+    return info_marginalize(J_new, J12, J22, h)
+
+
+def info_kalman_filter(init_params, pair_params, observations):
+    J, h = init_params
+    J11, J12, J22 = pair_params
+
     forward_messages = []
-    log_norm = 0
-    for loc, scale in zip(*potentials):
+    for (J_obs, h_obs) in observations:
+        J_cond, h_cond = info_condition(J, h, J_obs, h_obs)
+        J, h = info_predict(J_cond, h_cond, J11, J12, J22)
+        forward_messages.append(((J_cond, h_cond), (J, h)))
 
-        # convert potentials to information form
-        J_obs = -2 * scale
-        h_obs = loc
-
-        # do forward step
-        cond_msg, pred_msg = state.predict(
-            J_obs,
-            h_obs,
-            *pair_params,
-            h1=torch.zeros_like(h_obs),
-            h2=torch.zeros_like(h_obs)
-        )
-        forward_messages.append((cond_msg, pred_msg))
-
-        # set next state
-        state = Gaussian(info_to_natural(*pred_msg))  # x_{t+1}
-
-    return forward_messages, log_norm
+    return forward_messages
 
 
-def smooth(forward_messages, pair_params):
-    """
-    Kalman smoothing using information form.
+def info_rst_smoothing(J, h, cond_msg, pred_msg, pair_params, loc_next):
+    J_cond, h_cond = cond_msg
+    J_pred, h_pred = pred_msg
+    J11, J12, J22 = pair_params
 
-    Parameters
-    ----------
-    forward_messages:
-        Messages produced by Kalman filtering.
-    pair_params:
-        Transition mechanics.
+    temp = J12 @ torch.inverse(J - J_pred + J22)
+    J_smooth = J_cond + J11 - temp @ J12.T
+    # h_smooth = h_cond + h1 - temp @ (h - h_pred + h2)
+    h_smooth = h_cond - temp @ (h - h_pred)
 
-    Returns
-    -------
-
-    """
-    # initialization
-    (J_smooth, h_smooth), _ = forward_messages[-1]
-    state = Gaussian(info_to_natural(J_smooth, h_smooth))
     loc, scale = info_to_standard(J_smooth, h_smooth)
-    E_x = loc
-    E_xxT = scale + outer_product(E_x, E_x)
-    E_xnxT = 0.0
+    E_xnxT = temp @ scale + outer_product(loc_next, loc)
+    E_xxT = scale + outer_product(loc, loc)
 
-    # smoothing loop
-    expected_stats = [(E_x, E_xxT, E_xnxT)]
-    for i, (cond_msg, pred_msg) in enumerate(reversed(forward_messages[:-1])):
-        E_xn, _, _ = expected_stats[i]
+    stats = (loc, E_xxT, E_xnxT)
 
-        # do backward step
-        J_smooth, h_smooth, stats = state.rst_backward(
-            cond_msg, pred_msg, pair_params, E_xn
-        )
-        expected_stats.append(stats)
-
-        # set previous state
-        state = Gaussian(info_to_natural(J_smooth, h_smooth))
-
-    return expected_stats
+    return J_smooth, h_smooth, stats
 
 
 def process_expected_stats(expected_stats):
@@ -109,7 +85,8 @@ def process_expected_stats(expected_stats):
     def make_pair_stats(a, b):
         E_x, E_xxT, E_xnxT = a
         E_xn, E_xnxnT, _ = b
-        return E_xxT, E_xnxT.T, E_xnxnT, 1.0
+        # return E_xxT, E_xnxT.T, E_xnxnT, 1.0
+        return E_xnxnT, E_xnxT.T, E_xxT, 1.0
 
     def make_node_stats(a):
         E_x, E_xxT, _ = a
@@ -127,99 +104,144 @@ def process_expected_stats(expected_stats):
     return E_init_stats, E_pair_stats, E_node_stats
 
 
-def sample(forward_messages, pair_params, num_samples=1):
-    J11, J12, _, _ = pair_params
+def info_kalman_smoothing(forward_messages, pair_params):
+    _, (J_smooth, h_smooth) = forward_messages[-1]
+    loc, scale = info_to_standard(J_smooth, h_smooth)
+    E_xxT = scale + outer_product(loc, loc)
+    E_xnxT = 0.0
 
-    # initialization
-    (J_cond, h_cond), _ = forward_messages[-1]
-    next_sample = Gaussian(info_to_natural(J_cond, h_cond)).rsample(num_samples)
+    expected_stats = [(loc, E_xxT, E_xnxT)]
+    backward_messages = [(J_smooth, h_smooth)]
+    for i, (cond_msg, pred_msg) in enumerate(reversed(forward_messages[:-1])):
+        loc_next, _, _ = expected_stats[i]
+        J_smooth, h_smooth, stats = info_rst_smoothing(
+            J_smooth, h_smooth, cond_msg, pred_msg, pair_params, loc_next
+        )
+        backward_messages.append((J_smooth, h_smooth))
+        expected_stats.append(stats)
 
-    # sampling loop
+    expected_stats = process_expected_stats(list(reversed(expected_stats)))
+
+    return list(reversed(backward_messages)), expected_stats
+
+
+def info_sample_backward(forward_messages, pair_params):
+    J11, J12, _ = pair_params
+
+    _, (J_pred, h_pred) = forward_messages[-1]
+    next_sample = Gaussian(info_to_natural(J_pred, h_pred)).rsample()
+
     samples = [next_sample]
-    for ((J_cond, h_cond), _) in reversed(forward_messages[:-1]):
+    for _, (J_pred, h_pred) in reversed(forward_messages[:-1]):
 
-        # get the parameters for the Gaussian we want to sample from
-        state = Gaussian(info_to_natural(J_cond, h_cond))
-        J, h = state.condition(J11, (-J12 @ next_sample.T).T.squeeze())
+        J = J_pred + J11
+        h = h_pred - next_sample @ J12
 
         # get the sample
-        state = Gaussian(info_to_natural(J, h))
-        next_sample = state.rsample(num_samples)
+        state = Gaussian(info_to_natural(J, h.squeeze(0)))
+        next_sample = state.rsample()
         samples.append(next_sample)
 
-    return torch.stack(samples)
+    return torch.stack(list(reversed(samples)))
 
 
-def local_optimization(
-    potentials: torch.Tensor, eta_theta: Tuple[torch.Tensor, torch.Tensor], num_samples=1
-):
-    """
+# def info_observation_params(obs):
+#     return natural_to_info(obs)
 
-    Parameters
-    ----------
-    potentials:
-        Output of the encoder network.
-    eta_theta:
-        Natural global parameters for Q(theta).
-    num_samples:
-        Number of samples
 
-    Returns
-    -------
+def info_observation_params(obs, C, R):
+    R_inv = torch.inverse(R)
+    R_inv_C = R_inv @ C
 
-    """
+    # J_obs = C.T @ inv(R) @ C
+    J_obs = C.T @ R_inv_C
+    # h_obs = (y - D @ u) @ inv(R) @ C
+    h_obs = obs @ R_inv_C
+
+    J_obs = J_obs.unsqueeze(0).repeat(len(obs), 1, 1)
+    return zip(J_obs, h_obs)
+
+
+def info_pair_params(A, Q):
+    J22 = torch.inverse(Q)
+    J12 = -A.T @ J22
+    J11 = A.T @ -J12
+    return J11, J12, J22
+
+
+def sample_forward_messages(messages):
+    samples = []
+    for _, (J, h) in messages:
+        loc, scale = info_to_standard(J, h)
+        x = loc + scale @ torch.randn(1, device=device)
+        samples.append(x.cpu().detach().numpy())
+    return samples
+
+
+def sample_backward_messages(messages):
+    samples = []
+    for (J, h) in messages:
+        loc, scale = info_to_standard(J, h)
+        x = loc + scale @ torch.randn(1, device=device)
+        samples.append(x.cpu().detach().numpy())
+    return samples
+
+
+def local_optimization(potentials, eta_theta, latents, obs, plot=False):
+
     device = potentials.device
-    scale, loc, _, _ = unpack_dense(potentials)
+    C = torch.diag(torch.ones(1, device=device))
+    R = torch.diag(torch.ones(1, device=device))
+    # y = info_observation_params(obs, C, R)
+    y = list(zip(*natural_to_info(potentials)))
 
     """
     priors 
     """
     niw_param, mniw_param = eta_theta
-    init_param = NormalInverseWishart(niw_param).expected_stats()
-    pair_param = MatrixNormalInverseWishart(mniw_param).expected_stats()
-    J11, J12, J22, logZ = pair_param
 
-    eta_x = (init_param, pair_param)
-
-    # convert from natural to information form
-    J11 = -2 * J11
-    J12 = -1 * J12
-    J22 = -2 * J22
-
-    assert is_psd(J11)
-    assert is_psd(J22)
+    J11, J12, J22, _ = MatrixNormalInverseWishart(mniw_param).expected_stats()
+    J11 *= -2
+    J12 *= -1
+    J22 *= -2
 
     """
     optimize local parameters
     """
-    forward_messages, log_norm = filter(
-        init_param, pair_params=(J11, J12, J22, logZ), potentials=(loc, scale)
-    )
-    expected_stats = smooth(forward_messages, pair_params=(J11, J12, J22, logZ))
-    expected_stats = process_expected_stats(list(reversed(expected_stats)))
-    samples = sample(forward_messages, pair_params=(J11, J12, J22, logZ), num_samples=num_samples)
+    init_param = natural_to_info(NormalInverseWishart(niw_param).expected_stats())
+    init_param = tuple([p.squeeze() for p in init_param])
 
-    """
-    Statistics
-    """
-    global_expected_stats = expected_stats[:-1]
-    global_expected_stats = (
-        pack_dense(
-            global_expected_stats[0][0],
-            global_expected_stats[0][1],
-            torch.tensor([global_expected_stats[0][2]], device=device),
-            torch.tensor([global_expected_stats[0][3]], device=device),
-        ),
-        global_expected_stats[1],
+    forward_messages = info_kalman_filter(
+        init_params=init_param, pair_params=(J11, J12, J22), observations=y
     )
-
-    local_expected_stats = expected_stats[-1]
-    local_expected_stats = pack_dense(
-        torch.stack(local_expected_stats[0]), torch.stack(local_expected_stats[1]),
+    backward_messages, expected_stats = info_kalman_smoothing(
+        forward_messages, pair_params=(J11, J12, J22)
     )
-    """
-    KL-Divergence 
-    """
-    local_kld = torch.tensordot(potentials, local_expected_stats, 3) - log_norm
+    E_init_stats, E_pair_stats, _ = expected_stats
 
-    return samples, eta_x, global_expected_stats, local_kld
+    forward_samples = sample_forward_messages(forward_messages)
+    backward_samples = sample_backward_messages(backward_messages)
+    samples = info_sample_backward(forward_messages, pair_params=(J11, J12, J22))
+
+    if plot:
+        fig, ax = plt.subplots(1, 2)
+
+        ax1 = ax[0]
+        ax1.plot(latents.detach().numpy(), label="true")
+        ax1.plot(forward_samples, label="predicted")
+        ax1.plot(backward_samples, label="smoothed")
+        ax1.legend()
+        ax1.set_xlabel("time")
+        ax1.set_ylabel("latent x")
+
+        ax2 = ax[1]
+        ax2.plot(obs.cpu().detach().numpy(), label="observed")
+        ax2.plot(samples.squeeze().cpu().detach().numpy(), label="sampled")
+        ax2.legend()
+        ax2.set_xlabel("time")
+        ax2.set_ylabel("obs y")
+
+        plt.tight_layout()
+        plt.show()
+
+    return samples, None, (E_init_stats, E_pair_stats), None

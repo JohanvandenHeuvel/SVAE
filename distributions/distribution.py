@@ -23,11 +23,6 @@ class ExpDistribution(ABC):
         """Convert natural parameters to standard parameters."""
         pass
 
-    @abstractmethod
-    def standard_to_natural(self, *args) -> torch.Tensor:
-        """Convert standard parameters to natural parameters."""
-        pass
-
     @property
     def nat_param(self) -> torch.Tensor:
         """Get the natural parameters.

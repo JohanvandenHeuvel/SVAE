@@ -53,9 +53,7 @@ def sample(kappa, mu_0, Phi, nu, n=1):
     # first sample Sigma from inverse-wishart
     Sigma = invwishart.rvs(df=nu, scale=Phi, size=n)
     # second sample mu from multivariate-normal
-    mu = multivariate_normal.rvs(
-        mu_0, 1 / kappa * Sigma, size=n
-    )
+    mu = multivariate_normal.rvs(mu_0, 1 / kappa * Sigma, size=n)
     return mu, Sigma
 
 
@@ -142,9 +140,14 @@ class NormalInverseWishart(ExpDistribution):
         if not is_batch(kappa):
             kappa = make_batch(kappa)
 
-        eta_2 = Phi + batch_elementwise_multiplication(kappa, batch_outer_product(mu_0, mu_0))
-        eta_3 = kappa * mu_0
-        eta_4 = kappa
+        # TODO why is 1/kappa used here?
+        k = 1 / kappa
+
+        eta_2 = Phi + batch_elementwise_multiplication(
+            k, batch_outer_product(mu_0, mu_0)
+        )
+        eta_3 = k * mu_0
+        eta_4 = k
         # eta_1 = nu + p + 2
         eta_1 = nu
 

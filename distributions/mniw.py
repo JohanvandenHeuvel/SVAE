@@ -28,12 +28,19 @@ class MatrixNormalInverseWishart(ExpDistribution):
         E_T2 = -nu / 2 * symmetrize(torch.inverse(Phi)) + fudge * torch.eye(
             p, device=self.device
         )
-        E_T3 = -2 * torch.matmul(E_T2, M)
-        E_T4 = -0.5 * (torch.matmul(M, E_T3) + n * K)
+        # E_T3 = -2 * torch.matmul(E_T2, M)
+        # E_T4 = -0.5 * (symmetrize(torch.matmul(M, E_T3)) + n * K + fudge * torch.eye(p, device=self.device))
         E_T1 = -0.5 * (
             multidigamma(nu / 2.0, n)
             + n * torch.log(torch.tensor([2], device=self.device))
             - torch.slogdet(Phi)[1]
+        )
+
+        E_T3 = nu * torch.linalg.solve(Phi, M)
+        E_T4 = -0.5 * (
+            n * K
+            + nu * symmetrize(M.T @ torch.linalg.solve(Phi, M))
+            + fudge * torch.eye(n, device=self.device)
         )
 
         assert is_posdef(-2 * E_T2)

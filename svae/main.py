@@ -1,18 +1,14 @@
 import os
 
-from vae import resVAE, VAE
-
+from data import make_dot_data, make_lds_data
 from log import make_folder, save_dict
 from plot.gmm_plot import plot_loss
-from data import make_pinwheel_data, make_two_cluster_data, make_dot_data
 from svae import SVAE
-from sklearn.preprocessing import StandardScaler
-
-import matplotlib.pyplot as plt
+from vae import VAE, resVAE
 
 hyperparameters = {
     "VAE_parameters": {
-        "latent_dim": 10,
+        "latent_dim": 1,
         "hidden_size": 40,
         "recon_loss": "likelihood",
         "name": "vae",
@@ -25,30 +21,24 @@ hyperparameters = {
         "num_per_class": 100,
         "rate": 0.25,
     },
-    "SVAE_train_parameters": {
-        "K": 15,
-        "batch_size": 50,
-        "epochs": 10,
-        "kld_weight": 0.35,
-    },
+    "SVAE_train_parameters": {"batch_size": 100, "epochs": 1000,},
 }
 
 
 def get_data():
-    # generate synthetic data
-    # data = make_pinwheel_data(**hyperparameters["pinwheel_data_parameters"])
-    # data = make_two_cluster_data(100)
-    data = make_dot_data(image_width=20, T=500, num_steps=5000, v=0.75, render_sigma=0.15, noise_sigma=0.1)
+    data = make_dot_data(
+        image_width=20,
+        T=500,
+        num_steps=5000,
+        v=0.75,
+        render_sigma=0.15,
+        noise_sigma=0.1,
+    )
     return data
 
 
-def get_network(data, save_path):
-    _, input_size = data.shape
-    network = resVAE(input_size=input_size, **hyperparameters["VAE_parameters"])
-    # train_loss = network.fit(
-    #     data, save_path=save_path, **hyperparameters["VAE_train_parameters"]
-    # )
-    # plot_loss(train_loss, title="vae_loss", save_path=save_path)
+def get_network(data):
+    network = resVAE(input_size=1, **hyperparameters["VAE_parameters"])
     return network
 
 
@@ -56,9 +46,9 @@ def main():
     folder_name = make_folder()
     save_dict(hyperparameters, save_path=folder_name, name="hyperparameters")
 
-    data = get_data()
+    data = make_lds_data(100, noise_scale=1)
 
-    network = get_network(data, save_path=os.path.join(folder_name, "vae"))
+    network = get_network(data[1])
 
     model = SVAE(network)
     train_loss = model.fit(

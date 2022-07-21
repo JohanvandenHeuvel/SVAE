@@ -2,6 +2,7 @@ from typing import Tuple
 
 import numpy as np
 import torch
+from torch import Tensor
 
 from distributions import (
     NormalInverseWishart,
@@ -93,12 +94,8 @@ def initialize_global_gmm_parameters(
 
 
 def natural_gradient(
-    stats: Tuple[torch.Tensor, torch.Tensor],
-    eta_theta: Tuple[torch.Tensor, torch.Tensor],
-    eta_theta_prior: Tuple[torch.Tensor, torch.Tensor],
-    N: int,
-    num_batches: int,
-) -> Tuple[torch.Tensor, torch.Tensor]:
+    stats, eta_theta, eta_theta_prior, N, num_batches,
+):
     """
     Natural gradient for the global variational parameters eta_theta
 
@@ -116,18 +113,13 @@ def natural_gradient(
         Number of batches in the data.
     """
 
-    def nat_grad(prior, posterior, s) -> torch.Tensor:
-        if isinstance(prior, Tuple):
-            return [
-                -1.0 / N * prior[j] - posterior[j] + num_batches * s[j]
-                for j in range(len(prior))
-            ]
+    def nat_grad(prior, posterior, s):
         return -1.0 / N * (prior - posterior + num_batches * s)
 
-    value = [
-        nat_grad(eta_theta_prior[i], eta_theta[i], stats[i])
-        for i in range(len(eta_theta))
-    ]
+    value = []
+    for i in range(len(eta_theta)):
+        value.append(nat_grad(eta_theta_prior[i], eta_theta[i], stats[i]))
+
     return value
 
 
@@ -164,3 +156,9 @@ def prior_kld_gmm(
     niw_kld = exponential_kld(niw, niw_prior)
 
     return dir_kld + niw_kld
+
+
+def gradient_descent(w, grad_w, step_size):
+    if not isinstance(w, Tensor):
+        return [gradient_descent(w[i], grad_w[i], step_size) for i in range(len(w))]
+    return w - step_size * grad_w
