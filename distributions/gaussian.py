@@ -1,7 +1,7 @@
 import torch
 from scipy.stats import multivariate_normal
 
-from dense import pack_dense, unpack_dense
+from distributions.dense import pack_dense, unpack_dense
 from .distribution import ExpDistribution
 
 

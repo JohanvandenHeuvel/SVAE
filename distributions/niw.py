@@ -1,6 +1,6 @@
 import torch
 
-from dense import pack_dense, unpack_dense
+from distributions.dense import pack_dense, unpack_dense
 from .distribution import ExpDistribution
 
 from scipy.stats import invwishart, multivariate_normal

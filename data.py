@@ -4,7 +4,8 @@ import matplotlib.pyplot as plt
 from scipy.signal import sawtooth
 import torch
 
-from distributions.gaussian import standard_to_natural, Gaussian
+from distributions.gaussian import standard_to_natural
+from distributions import Gaussian
 
 
 def make_lds_data(n, noise_scale=1e-1):

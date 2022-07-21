@@ -6,13 +6,10 @@ import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from dense import pack_dense
-from svae.global_optimization import (
-    natural_gradient,
-    initialize_global_lds_parameters,
-    gradient_descent,
-)
-from svae.local_optimization.lds import local_optimization
+from distributions.dense import pack_dense
+from svae.gradient import natural_gradient, gradient_descent
+from svae.lds.global_optimization import initialize_global_lds_parameters
+from svae.lds.local_optimization import local_optimization
 from vae import VAE
 
 
@@ -31,7 +28,7 @@ class SVAE:
         self.vae.save_model()
 
         # global parameters
-        torch.save(self.eta_theta, os.path.join(path, f"eta_theta.pt"))
+        torch.save(self.eta_theta, os.path.join(path, f"../eta_theta.pt"))
 
     def load_model(self):
         """load model from disk"""
@@ -41,7 +38,7 @@ class SVAE:
         self.vae.load_model()
 
         # global parameters
-        self.eta_theta = torch.load(os.path.join(path, f"eta_theta.pt"))
+        self.eta_theta = torch.load(os.path.join(path, f"../eta_theta.pt"))
 
     def encode(self, y):
         mu, log_var = self.vae.encode(y)
@@ -112,10 +109,6 @@ class SVAE:
             Number of epochs to train.
         batch_size:
             Size of each batch.
-        K:
-            Number of clusters in latent space.
-        kld_weight:
-            Weight for the KLD in the loss.
         save_path:
             Where to save plots etc.
         """
@@ -137,7 +130,6 @@ class SVAE:
 
         mniw_prior, mniw_param = list(mniw_prior), list(mniw_param)
 
-        # optimizer = torch.optim.Adam(self.vae.parameters(), lr=1e-3, weight_decay=0.001)
         optimizer = torch.optim.Adam(self.vae.parameters(), lr=1e-3)
 
         train_loss = []
@@ -146,7 +138,6 @@ class SVAE:
 
             total_loss = []
             for _, y in enumerate(dataloader):
-                # y = y.float().
                 potentials = self.encode(y)
 
                 # remove dependency on previous iterations
