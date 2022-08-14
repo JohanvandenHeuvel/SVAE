@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
-from typing import Tuple
+from typing import Tuple, List
 
 import torch
+import numpy as np
 
 
 class ExpDistribution(ABC):
@@ -50,11 +51,24 @@ def exponential_kld(dist_1: ExpDistribution, dist_2: ExpDistribution, expected_s
     if expected_stats is None:
         expected_stats = dist_1.expected_stats()
     # TODO sometimes gives negative values
-    value = (
-        torch.flatten((dist_1.nat_param - dist_2.nat_param))
-        @ torch.flatten(expected_stats)
-        - dist_1.logZ()
-        + dist_2.logZ()
-    )
+    P = dist_1.nat_param
+    Q = dist_2.nat_param
+    if isinstance(P, List):
+        P = np.array([x.cpu().detach().numpy() for x in P])
+        Q = np.array([x.cpu().detach().numpy() for x in Q])
+        expected_stats = np.array([x.cpu().detach().numpy() for x in expected_stats])
+        value = (
+                (P - Q).flatten()
+                @ expected_stats.flatten()
+                - dist_1.logZ()
+                + dist_2.logZ()
+        )
+    else:
+        value = (
+            torch.flatten((P - Q))
+            @ torch.flatten(expected_stats)
+            - dist_1.logZ()
+            + dist_2.logZ()
+        )
     assert value >= 0
     return value.item()

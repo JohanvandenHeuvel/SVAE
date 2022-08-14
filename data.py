@@ -9,13 +9,15 @@ from distributions import Gaussian
 
 
 def make_lds_data(n, noise_scale=1e-1):
+    # State -> State matrices
     A = torch.diag(torch.ones(1))
     Q = torch.diag(torch.ones(1))
+    # State -> Observation matrices
     C = torch.diag(torch.ones(1))
     R = torch.diag(torch.ones(1))
 
     init_params = standard_to_natural(
-        loc=torch.ones(1).unsqueeze(0) * 4,
+        loc=torch.zeros(1).unsqueeze(0),
         scale=torch.diag(torch.ones(1) * noise_scale).unsqueeze(0),
     )
     x_1 = Gaussian(nat_param=init_params).rsample()
@@ -25,7 +27,9 @@ def make_lds_data(n, noise_scale=1e-1):
     for i in range(n):
         old_x = x[i]
 
+        # compute next state
         new_x = A @ old_x + Q @ torch.randn(1) * noise_scale
+        # compute observation
         new_y = C @ old_x + R @ torch.randn(1) * noise_scale
 
         x.append(new_x)

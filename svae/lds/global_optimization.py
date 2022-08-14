@@ -26,7 +26,7 @@ def initialize_global_lds_parameters(n, scale=1.0):
     return init_state_prior.to(device), dynamics_prior
 
 
-def prior_kld_lds(eta_theta, eta_theta_prior, eta_x):
+def prior_kld_lds(eta_theta, eta_theta_prior, eta_x=None):
     niw_params, mniw_params = eta_theta
     niw_params_prior, mniw_params_prior = eta_theta_prior
 

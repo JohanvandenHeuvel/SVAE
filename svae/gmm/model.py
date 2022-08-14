@@ -126,7 +126,7 @@ class SVAE:
             K, D, alpha=1.0, niw_conc=1.0, random_scale=3.0
         )
 
-        optimizer = torch.optim.Adam(self.vae.parameters(), lr=1e-3, weight_decay=0.001)
+        optimizer = torch.optim.Adam(self.vae.parameters(), lr=1e-3, weight_decay=1e-3)
 
         train_loss = []
         # self.save_and_log(obs, "pre", save_path, eta_theta)

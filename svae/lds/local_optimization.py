@@ -1,5 +1,4 @@
 import torch
-from matplotlib import pyplot as plt
 
 from distributions import MatrixNormalInverseWishart, NormalInverseWishart
 from distributions.gaussian import (
@@ -27,35 +26,46 @@ def condition(J, h, y, Jxx, Jxy):
     return J_cond, h_cond
 
 
-def info_marginalize(J11, J12, J22, h):
+def info_marginalize(J11, J12, J22, h, logZ):
+
+    T = lambda A: torch.swapaxes(A, axis0=-1, axis1=-2)
+    symmetrize = lambda A: (A + T(A)) / 2
+
+    # assert logZ < 0
     # J11_inv = torch.inverse(J11)
     # temp = J12.T @ J11_inv
     temp = torch.linalg.solve(J11, J12)
 
     # J_pred = J22 - J12.T @ inv(J11) @ J12
+    # TODO symmetrize?
     J_pred = J22 - temp @ J12
     # h_pred = h2 - J12.T @ inv(J11) @ h1
     h_pred = -temp @ h
+    # logZ_pred = logZ - 1/2 h1.T @ inv(J11) @ h1 + 1/2 log|J11| - n/2 log(2pi)
+    logZ_pred = logZ - 1 / 2 * (h @ torch.linalg.solve(J11, h) + torch.slogdet(J11)[1])
 
-    return J_pred, h_pred
+    # if logZ_pred >= 0:
+    #     raise ValueError("log normalization constant should be negative")
+
+    return J_pred, h_pred, logZ_pred
 
 
-def info_predict(J, h, J11, J12, J22):
+def info_predict(J, h, J11, J12, J22, logZ):
     J_new = J + J11
-    return info_marginalize(J_new, J12, J22, h)
+    return info_marginalize(J_new, J12, J22, h, logZ)
 
 
 def info_kalman_filter(init_params, pair_params, observations):
     J, h = init_params
-    J11, J12, J22 = pair_params
+    J11, J12, J22, logZ = pair_params
 
     forward_messages = []
     for (J_obs, h_obs) in observations:
         J_cond, h_cond = info_condition(J, h, J_obs, h_obs)
-        J, h = info_predict(J_cond, h_cond, J11, J12, J22)
+        J, h, logZ = info_predict(J_cond, h_cond, J11, J12, J22, logZ)
         forward_messages.append(((J_cond, h_cond), (J, h)))
 
-    return forward_messages
+    return forward_messages, logZ
 
 
 def info_rst_smoothing(J, h, cond_msg, pred_msg, pair_params, loc_next):
@@ -65,7 +75,6 @@ def info_rst_smoothing(J, h, cond_msg, pred_msg, pair_params, loc_next):
 
     temp = J12 @ torch.inverse(J - J_pred + J22)
     J_smooth = J_cond + J11 - temp @ J12.T
-    # h_smooth = h_cond + h1 - temp @ (h - h_pred + h2)
     h_smooth = h_cond - temp @ (h - h_pred)
 
     loc, scale = info_to_standard(J_smooth, h_smooth)
@@ -80,7 +89,12 @@ def info_rst_smoothing(J, h, cond_msg, pred_msg, pair_params, loc_next):
 def process_expected_stats(expected_stats):
     def make_init_stats(a):
         E_x, E_xxT, _ = a
-        return E_xxT, E_x, 1.0, 1.0
+        return (
+            E_xxT,
+            E_x,
+            torch.tensor(1.0, device=E_x.device),
+            torch.tensor(1.0, device=E_x.device),
+        )
 
     def make_pair_stats(a, b):
         E_x, E_xxT, E_xnxT = a
@@ -98,8 +112,11 @@ def process_expected_stats(expected_stats):
     ]
     # same pair for every time step
     E_pair_stats = [sum(stats) for stats in list(zip(*E_pair_stats))]
+
     E_node_stats = [make_node_stats(a) for a in expected_stats]
     E_node_stats = list(zip(*E_node_stats))
+    E_node_stats[:2] = [torch.stack(E_stats) for E_stats in E_node_stats[:2]]
+    E_node_stats[-1] = torch.tensor(E_node_stats[-1], device=E_node_stats[0].device)
 
     return E_init_stats, E_pair_stats, E_node_stats
 
@@ -135,7 +152,7 @@ def info_sample_backward(forward_messages, pair_params):
     for _, (J_pred, h_pred) in reversed(forward_messages[:-1]):
 
         J = J_pred + J11
-        h = h_pred - next_sample @ J12
+        h = h_pred - next_sample @ J12.T
 
         # get the sample
         state = Gaussian(info_to_natural(J, h.squeeze(0)))
@@ -143,10 +160,6 @@ def info_sample_backward(forward_messages, pair_params):
         samples.append(next_sample)
 
     return torch.stack(list(reversed(samples)))
-
-
-# def info_observation_params(obs):
-#     return natural_to_info(obs)
 
 
 def info_observation_params(obs, C, R):
@@ -187,20 +200,19 @@ def sample_backward_messages(messages):
     return samples
 
 
-def local_optimization(potentials, eta_theta, latents, obs, plot=False):
+def local_optimization(potentials, eta_theta):
 
-    device = potentials.device
-    C = torch.diag(torch.ones(1, device=device))
-    R = torch.diag(torch.ones(1, device=device))
-    # y = info_observation_params(obs, C, R)
     y = list(zip(*natural_to_info(potentials)))
+
+    # J, h, _, _ = unpack_dense(potentials)
+    # y = list(zip(J, h))
 
     """
     priors 
     """
     niw_param, mniw_param = eta_theta
 
-    J11, J12, J22, _ = MatrixNormalInverseWishart(mniw_param).expected_stats()
+    J11, J12, J22, logZ = MatrixNormalInverseWishart(mniw_param).expected_stats()
     J11 *= -2
     J12 *= -1
     J22 *= -2
@@ -211,37 +223,18 @@ def local_optimization(potentials, eta_theta, latents, obs, plot=False):
     init_param = natural_to_info(NormalInverseWishart(niw_param).expected_stats())
     init_param = tuple([p.squeeze() for p in init_param])
 
-    forward_messages = info_kalman_filter(
-        init_params=init_param, pair_params=(J11, J12, J22), observations=y
+    forward_messages, logZ = info_kalman_filter(
+        init_params=init_param, pair_params=(J11, J12, J22, logZ), observations=y
     )
     backward_messages, expected_stats = info_kalman_smoothing(
         forward_messages, pair_params=(J11, J12, J22)
     )
-    E_init_stats, E_pair_stats, _ = expected_stats
 
-    forward_samples = sample_forward_messages(forward_messages)
-    backward_samples = sample_backward_messages(backward_messages)
     samples = info_sample_backward(forward_messages, pair_params=(J11, J12, J22))
 
-    if plot:
-        fig, ax = plt.subplots(1, 2)
+    E_init_stats, E_pair_stats, E_node_stats = expected_stats
+    # local_kld = torch.tensordot(potentials, pack_dense(*E_node_stats), dims=3) - logZ
 
-        ax1 = ax[0]
-        ax1.plot(latents.detach().numpy(), label="true")
-        ax1.plot(forward_samples, label="predicted")
-        ax1.plot(backward_samples, label="smoothed")
-        ax1.legend()
-        ax1.set_xlabel("time")
-        ax1.set_ylabel("latent x")
+    # E_init_stats, E_pair_stats = None, None
 
-        ax2 = ax[1]
-        ax2.plot(obs.cpu().detach().numpy(), label="observed")
-        ax2.plot(samples.squeeze().cpu().detach().numpy(), label="sampled")
-        ax2.legend()
-        ax2.set_xlabel("time")
-        ax2.set_ylabel("obs y")
-
-        plt.tight_layout()
-        plt.show()
-
-    return samples, None, (E_init_stats, E_pair_stats), None
+    return samples, None, (E_init_stats, E_pair_stats), 0.0
