@@ -149,6 +149,9 @@ def info_sample_backward(forward_messages, pair_params):
     next_sample = Gaussian(info_to_natural(J_pred, h_pred)).rsample()
 
     samples = [next_sample]
+
+    means = [h_pred]
+    variances = [-2 * J_pred]
     for _, (J_pred, h_pred) in reversed(forward_messages[:-1]):
 
         J = J_pred + J11
@@ -159,7 +162,14 @@ def info_sample_backward(forward_messages, pair_params):
         next_sample = state.rsample()
         samples.append(next_sample)
 
-    return torch.stack(list(reversed(samples)))
+        means.append(h.squeeze(0))
+        variances.append(-2 * J)
+
+    samples = torch.stack(list(reversed(samples)))
+    variances = torch.stack(list(reversed(variances)))
+    means = torch.stack(list(reversed(means)))
+
+    return samples, (means, variances)
 
 
 def info_observation_params(obs, C, R):
@@ -230,11 +240,11 @@ def local_optimization(potentials, eta_theta):
         forward_messages, pair_params=(J11, J12, J22)
     )
 
-    samples = info_sample_backward(forward_messages, pair_params=(J11, J12, J22))
+    samples, (means, variances) = info_sample_backward(forward_messages, pair_params=(J11, J12, J22))
 
     E_init_stats, E_pair_stats, E_node_stats = expected_stats
     # local_kld = torch.tensordot(potentials, pack_dense(*E_node_stats), dims=3) - logZ
 
     # E_init_stats, E_pair_stats = None, None
 
-    return samples, None, (E_init_stats, E_pair_stats), 0.0
+    return samples, None, (E_init_stats, E_pair_stats), 0.0, (means, variances)

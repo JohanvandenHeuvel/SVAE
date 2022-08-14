@@ -125,17 +125,21 @@ class SVAE:
         def get_samples(n_samples=5):
             samples = []
             latent_samples = []
+            params = []
             for i in range(n_samples):
                 # samples
-                sample, _, _, _ = local_optimization(potentials, eta_theta)
+                sample, _, _, _, (mean, variance) = local_optimization(
+                    potentials, eta_theta
+                )
                 sample = sample.squeeze()
                 # reconstruction
                 y, _ = self.decode(sample)
                 # save
                 samples.append(y)
                 latent_samples.append(sample)
+                params.append((mean, variance))
 
-            return samples, latent_samples
+            return samples, latent_samples, params
 
         with torch.no_grad():
             # only use a subset of the data for plotting
@@ -149,7 +153,7 @@ class SVAE:
 
             # get samples
             n_samples = 5
-            samples, latent_samples = get_samples(n_samples)
+            samples, latent_samples, params = get_samples(n_samples)
 
             for i in range(n_samples):
 
@@ -176,8 +180,21 @@ class SVAE:
                 ax[1].axis("off")
 
                 ax[2].clear()
-                for latent_state in latent_samples[i].T:
-                    ax[2].plot(latent_state.cpu().detach().numpy())
+                colors = ["r", "g"]
+                for j, latent_state in enumerate(latent_samples[i].T):
+                    x = np.linspace(0, 100, 100)
+                    ax[2].plot(latent_state.cpu().detach().numpy(), "--", c=colors[j], alpha=0.8)
+                    mean, variance = params[i]
+                    mean = mean.T[j].cpu().detach().numpy()
+                    variance = (
+                        torch.diagonal(variance, offset=0, dim1=-2, dim2=-1)
+                        .T[j]
+                        .cpu()
+                        .detach()
+                        .numpy()
+                    )
+                    ax[2].plot(x, mean, c=colors[j], alpha=0.8)
+                    ax[2].fill_between(x, mean - variance, mean + variance, color=colors[j], alpha=0.1)
                 # ax[2].plot([prefix-0.5, prefix-0.5], [-0.5, data.shape[1]], 'r', linewidth=2)
                 # ax[2].axis("off")
                 # ax[2].autoscale(False)
@@ -236,7 +253,7 @@ class SVAE:
                 """
                 Find local optimum for local variational parameters eta_x, eta_z
                 """
-                x, _, (E_init_stats, E_pair_stats), local_kld = local_optimization(
+                x, _, (E_init_stats, E_pair_stats), local_kld, _ = local_optimization(
                     potentials, (niw_param, mniw_param)
                 )
 
