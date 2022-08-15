@@ -2,6 +2,7 @@ import os
 import pathlib
 
 import matplotlib
+from matplotlib.pyplot import cm
 
 matplotlib.use("TkAgg")
 import matplotlib.pyplot as plt
@@ -52,67 +53,22 @@ class SVAE:
     def encode(self, y):
         mu, log_var = self.vae.encode(y)
         # scale should be positive, and thus it's negative inverse should be negative
-        # scale = -torch.exp(0.5 * log_var)
-        scale = -0.5 * torch.log1p(torch.exp(log_var))
+        scale = -torch.exp(0.5 * log_var)
+        # scale = -0.5 * torch.log1p(torch.exp(log_var))
         potentials = pack_dense(scale, mu)
         return potentials
 
     def decode(self, x):
         mu_y, log_var_y = self.vae.decode(x)
-        return torch.sigmoid(mu_y), torch.log1p(log_var_y.exp())
+        # return torch.sigmoid(mu_y), torch.log1p(log_var_y.exp())
         # return torch.sigmoid(mu_y), log_var_y
+        return mu_y, log_var_y
 
     def forward(self, y):
         potentials = self.encode(y)
         x, eta_x, _, _ = local_optimization(potentials, self.eta_theta)
         mu_y, log_var_y = self.decode(x)
         return mu_y, log_var_y, x
-
-    # def save_and_log(self, obs, epoch, save_path, eta_theta):
-    #
-    #     def zero_out(prefix, potentials):
-    #         scale, loc, _, _ = unpack_dense(potentials)
-    #         loc[prefix:] = 0.0
-    #         scale[prefix:] = 0.0
-    #         potentials = pack_dense(scale, loc)
-    #         return potentials
-    #
-    #     def get_big_image(n_samples=5):
-    #         samples = []
-    #         for i in range(5):
-    #             # samples
-    #             sample, _, _, _ = local_optimization(potentials, eta_theta)
-    #             # reconstruction
-    #             y, _ = self.decode(sample.squeeze())
-    #             # save
-    #             samples.append(y)
-    #         mean_image = torch.stack(samples).mean(0)
-    #         samples = torch.hstack(samples[:n_samples])
-    #
-    #         big_image = torch.hstack((data, mean_image, samples))
-    #         big_image = big_image.cpu().detach().numpy()
-    #         return big_image
-    #
-    #     with torch.no_grad():
-    #         # only use a subset of the data for plotting
-    #         data = torch.tensor(obs).to(self.vae.device).float()
-    #         data = data[:100]
-    #
-    #         # set the observations to zero after prefix
-    #         prefix = 25
-    #         potentials = self.encode(data)
-    #         potentials = zero_out(prefix, potentials)
-    #
-    #         big_image = get_big_image()
-    #
-    #         fig, ax = plt.subplots(figsize=(10, 10))
-    #         ax.matshow(big_image, cmap="gray")
-    #         ax.plot([-0.5, big_image.shape[1]], [prefix-0.5, prefix-0.5], 'r', linewidth=2)
-    #         ax.autoscale(False)
-    #         ax.axis("off")
-    #
-    #         fig.tight_layout()
-    #         plt.show()
 
     def save_and_log(self, obs, epoch, save_path, eta_theta):
         def zero_out(prefix, potentials):
@@ -180,7 +136,7 @@ class SVAE:
                 ax[1].axis("off")
 
                 ax[2].clear()
-                colors = ["r", "g"]
+                colors = cm.rainbow(np.linspace(0, 1, 10))
                 for j, latent_state in enumerate(latent_samples[i].T):
                     x = np.linspace(0, 100, 100)
                     ax[2].plot(latent_state.cpu().detach().numpy(), "--", c=colors[j], alpha=0.8)
@@ -233,7 +189,7 @@ class SVAE:
 
         mniw_prior, mniw_param = list(mniw_prior), list(mniw_param)
 
-        optimizer = torch.optim.Adam(self.vae.parameters(), lr=1e-4)
+        optimizer = torch.optim.Adam(self.vae.parameters(), lr=1e-3, weight_decay=1e-2)
 
         train_loss = []
         self.save_and_log(obs, "pre", save_path, (niw_param, mniw_param))
@@ -278,7 +234,7 @@ class SVAE:
                 """
                 # reconstruction loss
                 mu_y, log_var_y = self.decode(x)
-                recon_loss = num_batches * self.vae.loss_function(y, mu_y, log_var_y)
+                recon_loss = num_batches * self.vae.loss_function(y, mu_y.squeeze(), log_var_y.squeeze())
 
                 # regularization
                 # global_kld = prior_kld_lds((niw_param, mniw_param), (niw_prior, mniw_prior))
@@ -293,7 +249,7 @@ class SVAE:
                 # update parameters
                 optimizer.step()
 
-                total_loss.append((recon_loss.item(), kld_weight * kld_loss))
+                total_loss.append((recon_loss.item(), kld_weight * kld_loss.item()))
                 # print(f"{i}: {total_loss[-1]}")
 
                 # if epoch % max((epochs // 10), 1) == 0 or epoch == 0:

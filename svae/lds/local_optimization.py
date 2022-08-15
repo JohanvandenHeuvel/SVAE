@@ -1,6 +1,7 @@
 import torch
 
 from distributions import MatrixNormalInverseWishart, NormalInverseWishart
+from distributions.dense import pack_dense
 from distributions.gaussian import (
     info_to_standard,
     Gaussian,
@@ -22,7 +23,7 @@ def info_condition(J, h, J_obs, h_obs):
 
 def condition(J, h, y, Jxx, Jxy):
     J_cond = J + Jxx
-    h_cond = h + (Jxy @ y.T).T
+    h_cond = h - (Jxy @ y.T).T
     return J_cond, h_cond
 
 
@@ -38,7 +39,7 @@ def info_marginalize(J11, J12, J22, h, logZ):
 
     # J_pred = J22 - J12.T @ inv(J11) @ J12
     # TODO symmetrize?
-    J_pred = J22 - temp @ J12
+    J_pred = symmetrize(J22 - temp @ J12)
     # h_pred = h2 - J12.T @ inv(J11) @ h1
     h_pred = -temp @ h
     # logZ_pred = logZ - 1/2 h1.T @ inv(J11) @ h1 + 1/2 log|J11| - n/2 log(2pi)
@@ -155,7 +156,8 @@ def info_sample_backward(forward_messages, pair_params):
     for _, (J_pred, h_pred) in reversed(forward_messages[:-1]):
 
         J = J_pred + J11
-        h = h_pred - next_sample @ J12.T
+        # TODO J12.T?
+        h = h_pred - next_sample @ J12
 
         # get the sample
         state = Gaussian(info_to_natural(J, h.squeeze(0)))
@@ -243,8 +245,8 @@ def local_optimization(potentials, eta_theta):
     samples, (means, variances) = info_sample_backward(forward_messages, pair_params=(J11, J12, J22))
 
     E_init_stats, E_pair_stats, E_node_stats = expected_stats
-    # local_kld = torch.tensordot(potentials, pack_dense(*E_node_stats), dims=3) - logZ
+    local_kld = torch.tensordot(potentials, pack_dense(*E_node_stats), dims=3) - logZ
 
     # E_init_stats, E_pair_stats = None, None
 
-    return samples, None, (E_init_stats, E_pair_stats), 0.0, (means, variances)
+    return samples, None, (E_init_stats, E_pair_stats), torch.tensor(0.0), (means, variances)

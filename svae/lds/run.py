@@ -6,7 +6,7 @@ from plot.gmm_plot import plot_loss
 from svae.lds import SVAE
 from vae import resVAE, VAE
 
-LATENT_DIM = 2
+LATENT_DIM = 10
 
 hyperparameters = {
     "VAE_parameters": {
@@ -16,7 +16,7 @@ hyperparameters = {
         "recon_loss": "likelihood",
         "name": "vae",
     },
-    "SVAE_train_parameters": {"batch_size": 50, "epochs": 5000, "kld_weight": 0.0, "latent_dim": LATENT_DIM},
+    "SVAE_train_parameters": {"batch_size": 50, "epochs": 5000, "kld_weight": 0.01, "latent_dim": LATENT_DIM},
     "data_parameters": {"image_width": 20, "T": 500, "num_steps": 5000},
 }
 

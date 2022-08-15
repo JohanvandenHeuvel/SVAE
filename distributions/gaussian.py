@@ -3,6 +3,7 @@ from scipy.stats import multivariate_normal
 
 from distributions.dense import pack_dense, unpack_dense
 from .distribution import ExpDistribution
+from torch.distributions import MultivariateNormal
 
 
 def batch_matrix_vector_product(A, b):
@@ -137,13 +138,17 @@ class Gaussian(ExpDistribution):
     def rsample(self, num_samples=1):
         """get samples using the re-parameterization trick and natural parameters"""
         loc, scale = self.natural_to_standard()
-        n = scale.shape[1]
+        # if torch.any(torch.isnan(torch.sqrt(scale))):
+        #     raise ValueError
 
-        # get random part
-        eps = torch.randn((num_samples, n), device=self.device)
-
-        # de-diagonalize scale
-        scale = torch.matmul(scale, torch.ones(n, device=self.device))
-        samples = loc + scale * eps
-
-        return samples
+        # n = scale.shape[1]
+        #
+        # # get random part
+        # eps = torch.randn((num_samples, n), device=self.device)
+        #
+        # # de-diagonalize scale
+        # scale = torch.matmul(scale, torch.ones(n, device=self.device))
+        # samples = loc + scale * eps
+        #
+        # return samples
+        return MultivariateNormal(loc, scale).rsample()
