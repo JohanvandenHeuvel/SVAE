@@ -19,28 +19,31 @@ from vae import VAE
 
 
 class SVAE:
-    def __init__(self, vae: VAE):
+    def __init__(self, vae: VAE, save_path=None):
         self.vae = vae
         self.device = vae.device
 
         self.eta_theta = None
+        self.save_path = save_path
+
+        if save_path is not None:
+            os.mkdir(save_path)
 
     def save_model(self):
         """save model to disk"""
-        path = pathlib.Path().resolve()
+        path = self.save_path
 
         # network
-        self.vae.save_model()
+        self.vae.save_model(path)
 
         # global parameters
         torch.save(self.eta_theta, os.path.join(path, f"eta_theta.pt"))
 
-    def load_model(self):
+    def load_model(self, path):
         """load model from disk"""
-        path = pathlib.Path().resolve()
 
         # network
-        self.vae.load_model()
+        self.vae.load_model(path)
 
         # global parameters
         self.eta_theta = torch.load(os.path.join(path, f"eta_theta.pt"))
@@ -62,7 +65,7 @@ class SVAE:
         mu_y, log_var_y = self.decode(x)
         return mu_y, log_var_y, x, classes
 
-    def save_and_log(self, obs, epoch, save_path, eta_theta):
+    def save_and_log(self, obs, epoch, eta_theta):
         with torch.no_grad():
             data = torch.tensor(obs).to(self.vae.device).float()
             potentials = self.encode(data)
@@ -84,10 +87,10 @@ class SVAE:
                 eta_theta=eta_theta,
                 classes=torch.argmax(label_stats, dim=-1).cpu().detach().numpy(),
                 title=f"epoch:{epoch}_svae",
-                save_path=save_path,
+                save_path=self.save_path,
             )
 
-    def fit(self, obs, epochs, batch_size, K, kld_weight, save_path=None):
+    def fit(self, obs, epochs, batch_size, K, kld_weight):
         """
         Find the optimum for global variational parameter eta_theta, and encoder/decoder parameters.
 
@@ -103,13 +106,8 @@ class SVAE:
             Number of clusters in latent space.
         kld_weight:
             Weight for the KLD in the loss.
-        save_path:
-            Where to save plots etc.
         """
         print("Training the SVAE ...")
-
-        if save_path is not None:
-            os.mkdir(save_path)
 
         # Make data object
         data = torch.tensor(obs).to(self.vae.device)
@@ -186,9 +184,9 @@ class SVAE:
             train_loss.append(np.mean(total_loss, axis=0))
 
             if epoch % max((epochs // 10), 1) == 0:
-                self.save_and_log(obs, epoch, save_path, eta_theta)
+                self.save_and_log(obs, epoch, eta_theta)
 
-        self.save_and_log(obs, "end", save_path, eta_theta)
+        self.save_and_log(obs, "end", eta_theta)
 
         print("Finished training of the SVAE")
         self.eta_theta = eta_theta

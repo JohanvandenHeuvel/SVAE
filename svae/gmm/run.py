@@ -37,12 +37,8 @@ def get_data():
     return data
 
 
-def get_network(data, save_path):
+def get_network():
     network = resVAE(**hyperparameters["VAE_parameters"])
-    # train_loss = network.fit(
-    #     data, save_path=save_path, **hyperparameters["VAE_train_parameters"]
-    # )
-    # plot_loss(train_loss, title="vae_loss", save_path=save_path)
     return network
 
 
@@ -51,12 +47,11 @@ def main():
     save_dict(hyperparameters, save_path=folder_name, name="hyperparameters")
 
     data = get_data()
-    network = get_network(data, save_path=os.path.join(folder_name, "vae"))
+    network = get_network()
 
-    model = SVAE(network)
+    model = SVAE(network, save_path=os.path.join(folder_name, "svae"))
     train_loss = model.fit(
         data,
-        save_path=os.path.join(folder_name, "svae"),
         **hyperparameters["SVAE_train_parameters"]
     )
     plot_loss(
