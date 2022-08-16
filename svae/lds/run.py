@@ -16,7 +16,12 @@ hyperparameters = {
         "recon_loss": "likelihood",
         "name": "vae",
     },
-    "SVAE_train_parameters": {"batch_size": 50, "epochs": 5000, "kld_weight": 0.01, "latent_dim": LATENT_DIM},
+    "SVAE_train_parameters": {
+        "batch_size": 50,
+        "epochs": 1,
+        "kld_weight": 0.15,
+        "latent_dim": LATENT_DIM,
+    },
     "data_parameters": {"image_width": 20, "T": 500, "num_steps": 5000},
 }
 
@@ -41,12 +46,8 @@ def main():
 
     network = get_network()
 
-    model = SVAE(network)
-    train_loss = model.fit(
-        observations,
-        save_path=os.path.join(folder_name, "svae"),
-        **hyperparameters["SVAE_train_parameters"]
-    )
+    model = SVAE(network, save_path=os.path.join(folder_name, "svae"))
+    train_loss = model.fit(observations, **hyperparameters["SVAE_train_parameters"])
     plot_loss(
         train_loss, title="svae_loss", save_path=os.path.join(folder_name, "svae")
     )

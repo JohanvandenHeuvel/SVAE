@@ -27,8 +27,13 @@ def condition(J, h, y, Jxx, Jxy):
     return J_cond, h_cond
 
 
-def info_marginalize(J11, J12, J22, h, logZ):
+def lognorm(J, h, full=False):
+    n = len(h)
+    constant = n * torch.log(torch.tensor(2 * torch.pi)) if full else 0.0
+    return 1 / 2 * (h @ torch.linalg.solve(J, h) + torch.slogdet(J)[1] + constant)
 
+
+def info_marginalize(J11, J12, J22, h, logZ):
     T = lambda A: torch.swapaxes(A, axis0=-1, axis1=-2)
     symmetrize = lambda A: (A + T(A)) / 2
 
@@ -43,7 +48,7 @@ def info_marginalize(J11, J12, J22, h, logZ):
     # h_pred = h2 - J12.T @ inv(J11) @ h1
     h_pred = -temp @ h
     # logZ_pred = logZ - 1/2 h1.T @ inv(J11) @ h1 + 1/2 log|J11| - n/2 log(2pi)
-    logZ_pred = logZ - 1 / 2 * (h @ torch.linalg.solve(J11, h) + torch.slogdet(J11)[1])
+    logZ_pred = logZ - lognorm(J11, h)
 
     # if logZ_pred >= 0:
     #     raise ValueError("log normalization constant should be negative")
@@ -154,7 +159,6 @@ def info_sample_backward(forward_messages, pair_params):
     means = [h_pred]
     variances = [-2 * J_pred]
     for _, (J_pred, h_pred) in reversed(forward_messages[:-1]):
-
         J = J_pred + J11
         # TODO J12.T?
         h = h_pred - next_sample @ J12
@@ -213,7 +217,6 @@ def sample_backward_messages(messages):
 
 
 def local_optimization(potentials, eta_theta):
-
     y = list(zip(*natural_to_info(potentials)))
 
     # J, h, _, _ = unpack_dense(potentials)
@@ -242,11 +245,14 @@ def local_optimization(potentials, eta_theta):
         forward_messages, pair_params=(J11, J12, J22)
     )
 
-    samples, (means, variances) = info_sample_backward(forward_messages, pair_params=(J11, J12, J22))
+    samples, (means, variances) = info_sample_backward(
+        forward_messages, pair_params=(J11, J12, J22)
+    )
 
     E_init_stats, E_pair_stats, E_node_stats = expected_stats
     local_kld = torch.tensordot(potentials, pack_dense(*E_node_stats), dims=3) - logZ
 
     # E_init_stats, E_pair_stats = None, None
+    # local_kld = torch.tensor(0.0)
 
-    return samples, None, (E_init_stats, E_pair_stats), torch.tensor(0.0), (means, variances)
+    return samples, None, (E_init_stats, E_pair_stats), local_kld, (means, variances)

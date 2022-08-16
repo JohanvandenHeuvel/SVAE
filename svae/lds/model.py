@@ -1,34 +1,29 @@
 import os
 import pathlib
+from tqdm import tqdm
 
-import matplotlib
-from matplotlib.pyplot import cm
-
-matplotlib.use("TkAgg")
-import matplotlib.pyplot as plt
 import numpy as np
 import torch
 from torch.utils.data import DataLoader
-from tqdm import tqdm
 
 from distributions.dense import pack_dense, unpack_dense
 from svae.gradient import natural_gradient, gradient_descent
 from svae.lds.global_optimization import initialize_global_lds_parameters, prior_kld_lds
 from svae.lds.local_optimization import local_optimization
 from vae import VAE
-
-plt.ion()
-fig, axs = plt.subplots(3, 5, figsize=(5 * 10, 10))
-fig.tight_layout()
-plt.show()
+from plot.lds_plot import plot
 
 
 class SVAE:
-    def __init__(self, vae: VAE):
+    def __init__(self, vae: VAE, save_path=None):
         self.vae = vae
         self.device = vae.device
 
         self.eta_theta = None
+        self.save_path = save_path
+
+        if save_path is not None:
+            os.mkdir(save_path)
 
     def save_model(self):
         """save model to disk"""
@@ -70,8 +65,17 @@ class SVAE:
         mu_y, log_var_y = self.decode(x)
         return mu_y, log_var_y, x
 
-    def save_and_log(self, obs, epoch, save_path, eta_theta):
+    def save_and_log(self, obs, epoch, eta_theta):
         def zero_out(prefix, potentials):
+            """Zero out a part of the data.
+
+            Parameters
+            ----------
+            prefix: int
+                After which time step zero-out the data.
+            potentials: tensor
+                Output from the encoder network.
+            """
             scale, loc, _, _ = unpack_dense(potentials)
             loc[prefix:] = 0.0
             scale[prefix:] = 0.0
@@ -79,9 +83,17 @@ class SVAE:
             return potentials
 
         def get_samples(n_samples=5):
-            samples = []
+            """Get decoded samples.
+
+            Parameters
+            ----------
+            n_samples: int
+                Number of samples.
+            """
+            decoded_samples = []
             latent_samples = []
-            params = []
+            latent_means = []
+            latent_vars = []
             for i in range(n_samples):
                 # samples
                 sample, _, _, _, (mean, variance) = local_optimization(
@@ -91,11 +103,17 @@ class SVAE:
                 # reconstruction
                 y, _ = self.decode(sample)
                 # save
-                samples.append(y)
+                decoded_samples.append(y)
                 latent_samples.append(sample)
-                params.append((mean, variance))
+                latent_means.append(mean)
+                latent_vars.append(variance)
 
-            return samples, latent_samples, params
+            decoded_samples = torch.stack(decoded_samples)
+            latent_samples = torch.stack(latent_samples)
+            latent_means = torch.stack(latent_means)
+            latent_vars = torch.stack(latent_vars)
+
+            return decoded_samples, latent_samples, latent_means, latent_vars
 
         with torch.no_grad():
             # only use a subset of the data for plotting
@@ -109,53 +127,18 @@ class SVAE:
 
             # get samples
             n_samples = 5
-            samples, latent_samples, params = get_samples(n_samples)
+            samples, latent_samples, latent_means, latent_vars = get_samples(n_samples)
+            plot(
+                obs=data.cpu().detach().numpy(),
+                samples=samples.cpu().detach().numpy(),
+                latent_samples=latent_samples.cpu().detach().numpy(),
+                latent_means=latent_means.cpu().detach().numpy(),
+                latent_vars=latent_vars.cpu().detach().numpy(),
+                title=f"epoch:{epoch}",
+                save_path=self.save_path,
+            )
 
-            for i in range(n_samples):
-
-                ax = axs[:, i]
-
-                ax[0].clear()
-                ax[0].matshow(data.T.cpu().detach().numpy(), cmap="gray")
-                ax[0].plot(
-                    [prefix - 0.5, prefix - 0.5],
-                    [-0.5, data.shape[1]],
-                    "r",
-                    linewidth=2,
-                )
-                ax[0].axis("off")
-
-                ax[1].clear()
-                ax[1].matshow(samples[i].T.cpu().detach().numpy(), cmap="gray")
-                ax[1].plot(
-                    [prefix - 0.5, prefix - 0.5],
-                    [-0.5, data.shape[1]],
-                    "r",
-                    linewidth=2,
-                )
-                ax[1].axis("off")
-
-                ax[2].clear()
-                colors = cm.rainbow(np.linspace(0, 1, 10))
-                for j, latent_state in enumerate(latent_samples[i].T):
-                    x = np.linspace(0, 100, 100)
-                    ax[2].plot(latent_state.cpu().detach().numpy(), "--", c=colors[j], alpha=0.8)
-                    mean, variance = params[i]
-                    mean = mean.T[j].cpu().detach().numpy()
-                    variance = (
-                        torch.diagonal(variance, offset=0, dim1=-2, dim2=-1)
-                        .T[j]
-                        .cpu()
-                        .detach()
-                        .numpy()
-                    )
-                    ax[2].plot(x, mean, c=colors[j], alpha=0.8)
-                    ax[2].fill_between(x, mean - variance, mean + variance, color=colors[j], alpha=0.1)
-                # ax[2].plot([prefix-0.5, prefix-0.5], [-0.5, data.shape[1]], 'r', linewidth=2)
-                # ax[2].axis("off")
-                # ax[2].autoscale(False)
-
-    def fit(self, obs, epochs, batch_size, latent_dim, kld_weight, save_path=None):
+    def fit(self, obs, epochs, batch_size, latent_dim, kld_weight):
         """
         Find the optimum for global variational parameter eta_theta, and encoder/decoder parameters.
 
@@ -169,13 +152,8 @@ class SVAE:
             Size of each batch.
         kld_weight:
             Weight for the KLD in the loss.
-        save_path:
-            Where to save plots etc.
         """
         print("Training the SVAE ...")
-
-        if save_path is not None:
-            os.mkdir(save_path)
 
         # Make data object
         data = torch.tensor(obs).to(self.vae.device)
@@ -192,80 +170,88 @@ class SVAE:
         optimizer = torch.optim.Adam(self.vae.parameters(), lr=1e-3, weight_decay=1e-2)
 
         train_loss = []
-        self.save_and_log(obs, "pre", save_path, (niw_param, mniw_param))
-        fig.canvas.draw()
-        plt.pause(0.1)
-        for epoch in tqdm(range(epochs + 1)):
+        self.save_and_log(obs, "pre", (niw_param, mniw_param))
+        try:
+            for epoch in tqdm(range(epochs + 1)):
 
-            total_loss = []
-            for i, y in enumerate(dataloader):
-                y = y.float()
-                potentials = self.encode(y)
+                total_loss = []
+                for i, y in enumerate(dataloader):
+                    y = y.float()
+                    potentials = self.encode(y)
 
-                # remove dependency on previous iterations
-                niw_param = niw_param.detach()
-                mniw_param = tuple([p.detach() for p in mniw_param])
+                    # remove dependency on previous iterations
+                    niw_param = niw_param.detach()
+                    mniw_param = tuple([p.detach() for p in mniw_param])
 
-                """
-                Find local optimum for local variational parameters eta_x, eta_z
-                """
-                x, _, (E_init_stats, E_pair_stats), local_kld, _ = local_optimization(
-                    potentials, (niw_param, mniw_param)
-                )
+                    """
+                    Find local optimum for local variational parameters eta_x, eta_z
+                    """
+                    (
+                        x,
+                        _,
+                        (E_init_stats, E_pair_stats),
+                        local_kld,
+                        _,
+                    ) = local_optimization(potentials, (niw_param, mniw_param))
 
-                """
-                Update global variational parameter eta_theta using natural gradient
-                """
-                # update global param
-                # nat_grad_init = natural_gradient(
-                #     pack_dense(*E_init_stats), niw_param, niw_prior, len(data), num_batches
-                # )
-                # niw_param = gradient_descent(
-                #     niw_param, torch.stack(nat_grad_init), step_size=1e-1
-                # )
+                    """
+                    Update global variational parameter eta_theta using natural gradient
+                    """
+                    # update global param
+                    nat_grad_init = natural_gradient(
+                        pack_dense(*E_init_stats),
+                        niw_param,
+                        niw_prior,
+                        len(data),
+                        num_batches,
+                    )
+                    niw_param = gradient_descent(
+                        niw_param, torch.stack(nat_grad_init), step_size=1e-1
+                    )
 
-                # nat_grad_pair = natural_gradient(
-                #     E_pair_stats, mniw_param, mniw_prior, len(data), num_batches
-                # )
-                # mniw_param = gradient_descent(mniw_param, nat_grad_pair, step_size=1e-5)
+                    nat_grad_pair = natural_gradient(
+                        E_pair_stats, mniw_param, mniw_prior, len(data), num_batches
+                    )
+                    mniw_param = gradient_descent(
+                        mniw_param, nat_grad_pair, step_size=1e-5
+                    )
 
-                """
-                Update encoder/decoder parameters using automatic differentiation
-                """
-                # reconstruction loss
-                mu_y, log_var_y = self.decode(x)
-                recon_loss = num_batches * self.vae.loss_function(y, mu_y.squeeze(), log_var_y.squeeze())
+                    """
+                    Update encoder/decoder parameters using automatic differentiation
+                    """
+                    # reconstruction loss
+                    mu_y, log_var_y = self.decode(x)
+                    recon_loss = num_batches * self.vae.loss_function(
+                        y, mu_y.squeeze(), log_var_y.squeeze()
+                    )
 
-                # regularization
-                # global_kld = prior_kld_lds((niw_param, mniw_param), (niw_prior, mniw_prior))
-                global_kld = 0.0
-                kld_loss = (global_kld + local_kld) / len(y)
+                    # regularization
+                    # global_kld = prior_kld_lds((niw_param, mniw_param), (niw_prior, mniw_prior))
+                    global_kld = 0.0
+                    kld_loss = (global_kld + local_kld) / len(y)
 
-                loss = recon_loss + kld_weight * kld_loss
+                    loss = recon_loss + kld_weight * kld_loss
 
-                optimizer.zero_grad()
-                # compute gradients
-                loss.backward()
-                # update parameters
-                optimizer.step()
+                    optimizer.zero_grad()
+                    # compute gradients
+                    loss.backward()
+                    # update parameters
+                    optimizer.step()
 
-                total_loss.append((recon_loss.item(), kld_weight * kld_loss.item()))
-                # print(f"{i}: {total_loss[-1]}")
+                    total_loss.append((recon_loss.item(), kld_weight * kld_loss.item()))
 
-                # if epoch % max((epochs // 10), 1) == 0 or epoch == 0:
-                #     print(total_loss[-1])
-            train_loss.append(np.mean(total_loss, axis=0))
-            print(f"{epoch}: {train_loss[-1]}")
+                    # if epoch % max((epochs // 10), 1) == 0 or epoch == 0:
+                    #     print(total_loss[-1])
+                train_loss.append(np.mean(total_loss, axis=0))
+                print(f"{epoch}: {train_loss[-1]}")
 
-            # if epoch % max((epochs // 10), 1) == 0:
-            #     self.save_and_log(obs, epoch, save_path, (niw_param, mniw_param))
-            self.save_and_log(obs, epoch, save_path, (niw_param, mniw_param))
-            fig.canvas.draw()
-            plt.pause(0.1)
+                # if epoch % max((epochs // 10), 1) == 0:
+                #     self.save_and_log(obs, epoch, save_path, (niw_param, mniw_param))
+                self.save_and_log(obs, epoch, (niw_param, mniw_param))
 
-        # self.save_and_log(obs, "end", save_path, eta_theta)
-
-        print("Finished training of the SVAE")
-        # self.eta_theta = eta_theta
-        self.save_model()
-        return train_loss
+        finally:
+            print("Finished training of the SVAE")
+            self.save_and_log(obs, "end", (niw_param, mniw_param))
+            self.eta_theta = (niw_param, mniw_param)
+            self.save_model()
+            return train_loss
