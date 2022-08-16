@@ -10,7 +10,7 @@ hyperparameters = {
     "VAE_parameters": {
         "latent_dim": 2,
         "input_size": 2,
-        "hidden_size": 40,
+        "hidden_size": [40],
         "recon_loss": "likelihood",
         "name": "vae",
     },

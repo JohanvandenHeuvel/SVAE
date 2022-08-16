@@ -59,16 +59,36 @@ class VAE(nn.Module):
         """
         ENCODER
         """
-        encoder = nn.Sequential(nn.Linear(input_size, hidden_size), nn.ReLU())
-        self.mu_enc = nn.Sequential(encoder, nn.Linear(hidden_size, latent_dim))
-        self.log_var_enc = nn.Sequential(encoder, nn.Linear(hidden_size, latent_dim))
+        encoder_layers = [input_size] + hidden_size
+        encoder_modules = nn.ModuleList()
+        # hidden layers
+        for i in range(len(encoder_layers) - 1):
+            encoder_modules.append(nn.Linear(encoder_layers[i], encoder_layers[i + 1]))
+            encoder_modules.append(nn.ReLU())
+        encoder = nn.Sequential(*encoder_modules)
+        # output layer
+        self.mu_enc = nn.Sequential(encoder, nn.Linear(encoder_layers[-1], latent_dim))
+        self.log_var_enc = nn.Sequential(encoder, nn.Linear(encoder_layers[-1], latent_dim))
+
+        self.mu_enc.apply(init_weights)
+        self.log_var_enc.apply(init_weights)
 
         """
         DECODER
         """
-        decoder = nn.Sequential(nn.Linear(latent_dim, hidden_size), nn.ReLU())
-        self.mu_dec = nn.Sequential(decoder, nn.Linear(hidden_size, input_size))
-        self.log_var_dec = nn.Sequential(decoder, nn.Linear(hidden_size, input_size))
+        decoder_layers = [latent_dim] + list(reversed(hidden_size))
+        decoder_modules = nn.ModuleList()
+        # hidden layers
+        for i in range(len(decoder_layers) - 1):
+            decoder_modules.append(nn.Linear(decoder_layers[i], decoder_layers[i + 1]))
+            decoder_modules.append(nn.ReLU())
+        decoder = nn.Sequential(*decoder_modules)
+        # output layer
+        self.mu_dec = nn.Sequential(decoder, nn.Linear(decoder_layers[-1], input_size))
+        self.log_var_dec = nn.Sequential(decoder, nn.Linear(decoder_layers[-1], input_size))
+
+        self.mu_dec.apply(init_weights)
+        self.log_var_dec.apply(init_weights)
 
         self.to(self.device)
 
@@ -106,15 +126,17 @@ class VAE(nn.Module):
             save_path=save_path,
         )
 
-    def save_model(self):
+    def save_model(self, path=None):
         """save model to disk"""
-        path = pathlib.Path().resolve()
+        if path is None:
+            path = pathlib.Path().resolve()
         torch.save(self.state_dict(), os.path.join(path, f"{self.name}.pt"))
         print(f"saved model to {os.path.join(path, f'{self.name}.pt')}")
 
-    def load_model(self):
+    def load_model(self, path=None):
         """load model from disk"""
-        path = pathlib.Path().resolve()
+        if path is None:
+            path = pathlib.Path().resolve()
         self.load_state_dict(torch.load(os.path.join(path, f"{self.name}.pt")))
         print(f"loaded model from {os.path.join(path, f'{self.name}.pt')}")
 

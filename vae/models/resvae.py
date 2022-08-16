@@ -20,15 +20,16 @@ class resVAE(VAE):
         """
         ENCODER
         """
-        # neural net
-        encoder = nn.Sequential(
-            nn.Linear(input_size, hidden_size),
-            nn.ReLU(),
-            nn.Linear(hidden_size, hidden_size),
-            nn.ReLU(),
-        )
-        mu_enc = nn.Sequential(encoder, nn.Linear(hidden_size, latent_dim))
-        log_var_enc = nn.Sequential(encoder, nn.Linear(hidden_size, latent_dim))
+        encoder_layers = [input_size] + hidden_size
+        encoder_modules = nn.ModuleList()
+        # hidden layers
+        for i in range(len(encoder_layers) - 1):
+            encoder_modules.append(nn.Linear(encoder_layers[i], encoder_layers[i + 1]))
+            encoder_modules.append(nn.ReLU())
+        encoder = nn.Sequential(*encoder_modules)
+        # output layer
+        mu_enc = nn.Sequential(encoder, nn.Linear(encoder_layers[-1], latent_dim))
+        log_var_enc = nn.Sequential(encoder, nn.Linear(encoder_layers[-1], latent_dim))
 
         mu_enc.apply(init_weights)
         log_var_enc.apply(init_weights)
@@ -51,15 +52,16 @@ class resVAE(VAE):
         """
         DECODER 
         """
-        # neural net
-        decoder = nn.Sequential(
-            nn.Linear(latent_dim, hidden_size),
-            nn.ReLU(),
-            nn.Linear(hidden_size, hidden_size),
-            nn.ReLU(),
-        )
-        mu_dec = nn.Sequential(decoder, nn.Linear(hidden_size, input_size))
-        log_var_dec = nn.Sequential(decoder, nn.Linear(hidden_size, input_size))
+        decoder_layers = [latent_dim] + list(reversed(hidden_size))
+        decoder_modules = nn.ModuleList()
+        # hidden layers
+        for i in range(len(decoder_layers) - 1):
+            decoder_modules.append(nn.Linear(decoder_layers[i], decoder_layers[i + 1]))
+            decoder_modules.append(nn.ReLU())
+        decoder = nn.Sequential(*decoder_modules)
+        # output layer
+        mu_dec = nn.Sequential(decoder, nn.Linear(decoder_layers[-1], input_size))
+        log_var_dec = nn.Sequential(decoder, nn.Linear(decoder_layers[-1], input_size))
 
         mu_dec.apply(init_weights)
         log_var_dec.apply(init_weights)
