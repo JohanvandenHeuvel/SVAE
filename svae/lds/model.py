@@ -27,23 +27,22 @@ class SVAE:
 
     def save_model(self):
         """save model to disk"""
-        path = pathlib.Path().resolve()
+        path = self.save_path
 
         # network
-        self.vae.save_model()
+        self.vae.save_model(path)
 
         # global parameters
-        torch.save(self.eta_theta, os.path.join(path, f"../eta_theta.pt"))
+        torch.save(self.eta_theta, os.path.join(path, f"eta_theta.pt"))
 
-    def load_model(self):
+    def load_model(self, path):
         """load model from disk"""
-        path = pathlib.Path().resolve()
 
         # network
-        self.vae.load_model()
+        self.vae.load_model(path)
 
         # global parameters
-        self.eta_theta = torch.load(os.path.join(path, f"../eta_theta.pt"))
+        self.eta_theta = torch.load(os.path.join(path, f"eta_theta.pt"))
 
     def encode(self, y):
         mu, log_var = self.vae.encode(y)
