@@ -126,19 +126,21 @@ class VAE(nn.Module):
             save_path=save_path,
         )
 
-    def save_model(self, path=None):
+    def save_model(self, path=None, affix=None):
         """save model to disk"""
         if path is None:
             path = pathlib.Path().resolve()
-        torch.save(self.state_dict(), os.path.join(path, f"{self.name}.pt"))
-        print(f"saved model to {os.path.join(path, f'{self.name}.pt')}")
+        name = f"{self.name}_{affix}.pt" if affix is not None else f"{self.name}.pt"
+        torch.save(self.state_dict(), os.path.join(path, name))
+        print(f"saved model to {os.path.join(path, name)}")
 
-    def load_model(self, path=None):
+    def load_model(self, path=None, affix=None):
         """load model from disk"""
         if path is None:
             path = pathlib.Path().resolve()
-        self.load_state_dict(torch.load(os.path.join(path, f"{self.name}.pt")))
-        print(f"loaded model from {os.path.join(path, f'{self.name}.pt')}")
+        name = f"{self.name}_{affix}.pt" if affix is not None else f"{self.name}.pt"
+        self.load_state_dict(torch.load(os.path.join(path, name)))
+        print(f"loaded model from {os.path.join(path, name)}")
 
     def reparameterize(self, mu, log_var):
         """reparameterization trick for Gaussian"""

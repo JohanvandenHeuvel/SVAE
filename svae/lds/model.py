@@ -25,24 +25,24 @@ class SVAE:
         if save_path is not None:
             os.mkdir(save_path)
 
-    def save_model(self):
+    def save_model(self, epoch):
         """save model to disk"""
         path = self.save_path
 
         # network
-        self.vae.save_model(path)
+        self.vae.save_model(path, epoch)
 
         # global parameters
-        torch.save(self.eta_theta, os.path.join(path, f"eta_theta.pt"))
+        torch.save(self.eta_theta, os.path.join(path, f"eta_theta_{epoch}.pt"))
 
-    def load_model(self, path):
+    def load_model(self, path, epoch):
         """load model from disk"""
 
         # network
-        self.vae.load_model(path)
+        self.vae.load_model(path, epoch)
 
         # global parameters
-        self.eta_theta = torch.load(os.path.join(path, f"eta_theta.pt"))
+        self.eta_theta = torch.load(os.path.join(path, f"eta_theta_{epoch}.pt"))
 
     def encode(self, y):
         mu, log_var = self.vae.encode(y)
@@ -55,8 +55,8 @@ class SVAE:
     def decode(self, x):
         mu_y, log_var_y = self.vae.decode(x)
         # return torch.sigmoid(mu_y), torch.log1p(log_var_y.exp())
-        # return torch.sigmoid(mu_y), log_var_y
-        return mu_y, log_var_y
+        return torch.sigmoid(mu_y), log_var_y
+        # return mu_y, log_var_y
 
     def forward(self, y):
         potentials = self.encode(y)
@@ -115,6 +115,10 @@ class SVAE:
             return decoded_samples, latent_samples, latent_means, latent_vars
 
         with torch.no_grad():
+
+            self.eta_theta = eta_theta
+            self.save_model(epoch)
+
             # only use a subset of the data for plotting
             data = torch.tensor(obs).to(self.vae.device).float()
             data = data[:100]
@@ -239,18 +243,13 @@ class SVAE:
 
                     total_loss.append((recon_loss.item(), kld_weight * kld_loss.item()))
 
-                    # if epoch % max((epochs // 10), 1) == 0 or epoch == 0:
-                    #     print(total_loss[-1])
                 train_loss.append(np.mean(total_loss, axis=0))
                 print(f"{epoch}: {train_loss[-1]}")
 
-                # if epoch % max((epochs // 10), 1) == 0:
-                #     self.save_and_log(obs, epoch, save_path, (niw_param, mniw_param))
-                self.save_and_log(obs, epoch, (niw_param, mniw_param))
+                if epoch % max((epochs // 20), 1) == 0:
+                    self.save_and_log(obs, epoch, (niw_param, mniw_param))
 
         finally:
             print("Finished training of the SVAE")
             self.save_and_log(obs, "end", (niw_param, mniw_param))
-            self.eta_theta = (niw_param, mniw_param)
-            self.save_model()
             return train_loss
