@@ -26,18 +26,16 @@ def initialize_global_lds_parameters(n, scale=1.0):
     return init_state_prior.to(device), dynamics_prior
 
 
-def prior_kld_lds(eta_theta, eta_theta_prior, eta_x=None):
+def prior_kld_lds(eta_theta, eta_theta_prior):
     niw_params, mniw_params = eta_theta
     niw_params_prior, mniw_params_prior = eta_theta_prior
 
     niw = NormalInverseWishart(niw_params)
     niw_prior = NormalInverseWishart(niw_params_prior)
-    # niw_kld = exponential_kld(niw, niw_prior, eta_x[0])
-    niw_kld = exponential_kld(niw, niw_prior)
+    niw_kld = exponential_kld(niw_prior, niw)
 
     mniw = MatrixNormalInverseWishart(mniw_params)
     mniw_prior = MatrixNormalInverseWishart(mniw_params_prior)
-    # mniw_kld = exponential_kld(mniw, mniw_prior, eta_x[1])
-    mniw_kld = exponential_kld(mniw, mniw_prior)
+    mniw_kld = exponential_kld(mniw_prior, mniw)
 
     return mniw_kld + niw_kld

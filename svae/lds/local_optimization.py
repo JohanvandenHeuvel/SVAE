@@ -12,12 +12,18 @@ from distributions.gaussian import (
 device = "cuda:0"
 
 
+def is_posdef(A):
+    return torch.allclose(A, A.T) and torch.all(torch.linalg.eigvalsh(A) > 0.0)
+
+
 def outer_product(x, y):
     # computes xyT
     return torch.einsum("i, j -> ij", (x, y))
 
 
 def info_condition(J, h, J_obs, h_obs):
+    if not is_posdef(J + J_obs):
+        raise ValueError("Conditioned matrix is not positive-definite")
     return J + J_obs, h + h_obs
 
 
@@ -30,7 +36,7 @@ def condition(J, h, y, Jxx, Jxy):
 def lognorm(J, h, full=False):
     n = len(h)
     constant = n * torch.log(torch.tensor(2 * torch.pi)) if full else 0.0
-    return 1 / 2 * (h @ torch.linalg.solve(J, h) + torch.slogdet(J)[1] + constant)
+    return 0.5 * (h @ torch.linalg.solve(J, h) + torch.slogdet(J)[1] + constant)
 
 
 def info_marginalize(J11, J12, J22, h, logZ):
@@ -43,7 +49,6 @@ def info_marginalize(J11, J12, J22, h, logZ):
     temp = torch.linalg.solve(J11, J12)
 
     # J_pred = J22 - J12.T @ inv(J11) @ J12
-    # TODO symmetrize?
     J_pred = symmetrize(J22 - temp @ J12)
     # h_pred = h2 - J12.T @ inv(J11) @ h1
     h_pred = -temp @ h
@@ -52,6 +57,9 @@ def info_marginalize(J11, J12, J22, h, logZ):
 
     # if logZ_pred >= 0:
     #     raise ValueError("log normalization constant should be negative")
+
+    if not is_posdef(J_pred):
+        raise ValueError("Predicted matrix is not positive-definite")
 
     return J_pred, h_pred, logZ_pred
 
@@ -160,8 +168,7 @@ def info_sample_backward(forward_messages, pair_params):
     variances = [-2 * J_pred]
     for _, (J_pred, h_pred) in reversed(forward_messages[:-1]):
         J = J_pred + J11
-        # TODO J12.T?
-        h = h_pred - next_sample @ J12
+        h = h_pred - next_sample @ J12.T
 
         # get the sample
         state = Gaussian(info_to_natural(J, h.squeeze(0)))
@@ -219,9 +226,6 @@ def sample_backward_messages(messages):
 def local_optimization(potentials, eta_theta):
     y = list(zip(*natural_to_info(potentials)))
 
-    # J, h, _, _ = unpack_dense(potentials)
-    # y = list(zip(J, h))
-
     """
     priors 
     """
@@ -250,9 +254,11 @@ def local_optimization(potentials, eta_theta):
     )
 
     E_init_stats, E_pair_stats, E_node_stats = expected_stats
-    local_kld = torch.tensordot(potentials, pack_dense(*E_node_stats), dims=3) - logZ
+    local_kld = (
+        torch.tensordot(
+            potentials, pack_dense(E_node_stats[0], E_node_stats[1]), dims=3
+        )
+        - logZ
+    )
 
-    # E_init_stats, E_pair_stats = None, None
-    # local_kld = torch.tensor(0.0)
-
-    return samples, None, (E_init_stats, E_pair_stats), local_kld, (means, variances)
+    return samples, (E_init_stats, E_pair_stats), local_kld, (means, variances)

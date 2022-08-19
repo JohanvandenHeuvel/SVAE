@@ -21,32 +21,42 @@ class MatrixNormalInverseWishart(ExpDistribution):
     def expected_stats(self):
         K, M, Phi, nu = self.natural_to_standard()
 
-        fudge = 1e-8
+        fudge = 1e-3
 
         n, _ = M.shape
         p, _ = Phi.shape
-        E_T2 = -nu / 2 * symmetrize(torch.inverse(Phi)) + fudge * torch.eye(
-            p, device=self.device
-        )
+        # E_T2 = -nu / 2 * symmetrize(torch.inverse(Phi)) + fudge * torch.eye(
+        #     p, device=self.device
+        # )
         # E_T3 = -2 * torch.matmul(E_T2, M)
-        # E_T4 = -0.5 * (symmetrize(torch.matmul(M, E_T3)) + n * K + fudge * torch.eye(p, device=self.device))
-        E_T1 = -0.5 * (
-            torch.slogdet(Phi)[1]
-            - n * torch.log(torch.tensor([2], device=self.device))
-            - multidigamma(nu / 2.0, n)
-        )
+        # E_T4 = -0.5 * (
+        #     symmetrize(torch.matmul(M, E_T3))
+        #     + n * K
+        #     + fudge * torch.eye(p, device=self.device)
+        # )
+        # E_T1 = -0.5 * (
+        #     torch.slogdet(Phi)[1]
+        #     - n * torch.log(torch.tensor([2], device=self.device))
+        #     - multidigamma(nu / 2, n)
+        # )
 
+        E_T2 = nu * torch.linalg.inv(symmetrize(Phi) + fudge * torch.eye(p, device=self.device))
         E_T3 = nu * torch.linalg.solve(Phi, M)
-        E_T4 = -0.5 * (
+        E_T4 = (
             n * K
-            + nu * symmetrize(M.T @ torch.linalg.solve(Phi, M))
+            + nu * symmetrize(torch.matmul(M.T, torch.linalg.solve(Phi, M)))
             + fudge * torch.eye(n, device=self.device)
         )
+        E_T1 = (
+                - torch.slogdet(Phi)[1]
+                + n * torch.log(torch.tensor([2], device=self.device))
+                + multidigamma(nu / 2, n)
+        )
 
-        assert is_posdef(-2 * E_T2)
-        assert is_posdef(-2 * E_T4)
+        # assert is_posdef(-2 * E_T2)
+        # assert is_posdef(-2 * E_T4)
 
-        return E_T2, E_T3, E_T4, E_T1
+        return -0.5 * E_T2, E_T3.T, -0.5 * E_T4, 0.5 * E_T1
 
     def logZ(self):
         K, M, Phi, nu = self.natural_to_standard()
@@ -59,14 +69,6 @@ class MatrixNormalInverseWishart(ExpDistribution):
         )
         return torch.sum(value)
 
-    def standard_to_natural(self, nu, Phi, M, K):
-        K_inv = torch.linalg.inv(K)
-        A = K_inv
-        B = torch.matmul(K_inv, M.T)
-        C = Phi + torch.matmul(M, B)
-        d = nu
-        return A, B, C, d
-
     def natural_to_standard(self):
         A, B, C, d = self.nat_param
         nu = d
@@ -75,3 +77,11 @@ class MatrixNormalInverseWishart(ExpDistribution):
         M = torch.matmul(K, B).T
         Phi = C - torch.matmul(M, B)
         return K, M, Phi, nu
+
+    def standard_to_natural(self, nu, Phi, M, K):
+        K_inv = torch.linalg.inv(K)
+        A = K_inv
+        B = torch.matmul(K_inv, M.T)
+        C = Phi + torch.matmul(M, B)
+        d = nu
+        return A, B, C, d
