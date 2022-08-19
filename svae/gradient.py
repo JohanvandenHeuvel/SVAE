@@ -1,3 +1,4 @@
+import torch
 from torch import Tensor
 
 
@@ -31,7 +32,35 @@ def natural_gradient(
     return value
 
 
-def gradient_descent(w, grad_w, step_size):
-    if not isinstance(w, Tensor):
-        return [gradient_descent(w[i], grad_w[i], step_size) for i in range(len(w))]
-    return w - step_size * grad_w
+class AdamOptim:
+    def __init__(self, step_size, beta1=0.9, beta2=0.999, eps=1e-8):
+        self.step_size = step_size
+        self.beta1 = beta1
+        self.beta2 = beta2
+        self.eps = eps
+
+        self.m = 0.0
+        self.v = 0.0
+
+    def update(self, t, w, grad_w):
+        if not isinstance(w, Tensor):
+            return [self.update(t, w[i], grad_w[i]) for i in range(len(w))]
+        self.m = (
+            1 - self.beta1
+        ) * grad_w + self.beta1 * self.m  # first moment estimate
+        self.v = (1 - self.beta2) * (
+            grad_w ** 2
+        ) + self.beta1 * self.v  # second moment estimate
+        m_hat = self.m / (1 - self.beta1 ** (t + 1))
+        v_hat = self.v / (1 - self.beta2 ** (t + 1))
+        return w - self.step_size * m_hat / (torch.sqrt(v_hat) + self.eps)
+
+
+class SGDOptim:
+    def __init__(self, step_size):
+        self.step_size = step_size
+
+    def update(self, w, grad_w):
+        if not isinstance(w, Tensor):
+            return [self.update(w[i], grad_w[i]) for i in range(len(w))]
+        return w - self.step_size * grad_w

@@ -13,7 +13,7 @@ device = "cuda:0"
 
 
 def is_posdef(A):
-    return torch.allclose(A, A.T) and torch.all(torch.linalg.eigvalsh(A) > 0.0)
+    return torch.allclose(A, A.T) and torch.all(torch.linalg.eigvalsh(A) >= 0.0)
 
 
 def outer_product(x, y):
@@ -22,8 +22,15 @@ def outer_product(x, y):
 
 
 def info_condition(J, h, J_obs, h_obs):
-    if not is_posdef(J + J_obs):
-        raise ValueError("Conditioned matrix is not positive-definite")
+    assert torch.allclose(J, J.T)
+    assert torch.all(torch.linalg.eigvalsh(J) >= 0.0)
+
+    assert torch.allclose(J_obs, J_obs.T)
+    assert torch.all(torch.linalg.eigvalsh(J_obs) >= 0.0)
+
+    assert torch.allclose((J + J_obs), (J + J_obs).T)
+    assert torch.all(torch.linalg.eigvalsh((J + J_obs)) >= 0.0)
+
     return J + J_obs, h + h_obs
 
 

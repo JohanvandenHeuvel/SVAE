@@ -7,7 +7,7 @@ from tqdm import tqdm
 
 from distributions.dense import pack_dense, unpack_dense
 from plot.lds_plot import plot
-from svae.gradient import natural_gradient, gradient_descent
+from svae.gradient import natural_gradient, AdamOptim, SGDOptim
 from svae.lds.global_optimization import initialize_global_lds_parameters, prior_kld_lds
 from svae.lds.local_optimization import local_optimization
 from vae import VAE
@@ -46,15 +46,15 @@ class SVAE:
     def encode(self, y):
         mu, log_var = self.vae.encode(y)
         # scale should be positive, and thus it's negative inverse should be negative
-        # scale = -torch.exp(0.5 * log_var)
-        scale = -0.5 * torch.log1p(torch.exp(log_var))
+        scale = -torch.exp(0.5 * log_var)
+        # scale = -0.5 * torch.log1p(torch.exp(log_var))
         potentials = pack_dense(scale, mu)
         return potentials
 
     def decode(self, x):
         mu_y, log_var_y = self.vae.decode(x)
-        return torch.sigmoid(mu_y), torch.log1p(log_var_y.exp())
-        # return torch.sigmoid(mu_y), log_var_y
+        # return torch.sigmoid(mu_y), torch.log1p(log_var_y.exp())
+        return torch.sigmoid(mu_y), log_var_y
         # return mu_y, log_var_y
 
     def forward(self, y):
@@ -170,6 +170,13 @@ class SVAE:
         mniw_prior, mniw_param = list(mniw_prior), list(mniw_param)
 
         optimizer = torch.optim.Adam(self.vae.parameters(), lr=1e-3, weight_decay=1e-2)
+        niw_optimizer = SGDOptim(step_size=1e-1)
+        mniw_optimizer = [
+            SGDOptim(step_size=1e-3),
+            SGDOptim(step_size=1e-3),
+            SGDOptim(step_size=1e-3),
+            SGDOptim(step_size=1e-3),
+        ]
 
         train_loss = []
         self.save_and_log(obs, "pre", (niw_param, mniw_param))
@@ -187,34 +194,30 @@ class SVAE:
                 """
                 Find local optimum for local variational parameters eta_x, eta_z
                 """
-                (
-                    x,
-                    (E_init_stats, E_pair_stats),
-                    local_kld,
-                    _,
-                ) = local_optimization(potentials, (niw_param, mniw_param))
+                (x, (E_init_stats, E_pair_stats), local_kld, _,) = local_optimization(
+                    potentials, (niw_param, mniw_param)
+                )
 
                 """
                 Update global variational parameter eta_theta using natural gradient
                 """
                 # update global param
-                nat_grad_init = natural_gradient(
-                    pack_dense(*E_init_stats),
-                    niw_param,
-                    niw_prior,
-                    len(data),
-                    num_batches,
-                )
-                niw_param = gradient_descent(
-                    niw_param, torch.stack(nat_grad_init), step_size=1e-1
-                )
+                # nat_grad_init = natural_gradient(
+                #     pack_dense(*E_init_stats),
+                #     niw_param,
+                #     niw_prior,
+                #     len(data),
+                #     num_batches,
+                # )
+                # niw_param = niw_optimizer.update(niw_param, torch.stack(nat_grad_init))
 
                 nat_grad_pair = natural_gradient(
                     E_pair_stats, mniw_param, mniw_prior, len(data), num_batches
                 )
-                mniw_param = gradient_descent(
-                    mniw_param, nat_grad_pair, step_size=1e-5
-                )
+                mniw_param = [
+                    mniw_optimizer[i].update(mniw_param[i], nat_grad_pair[i])
+                    for i in range(len(nat_grad_pair))
+                ]
 
                 """
                 Update encoder/decoder parameters using automatic differentiation
@@ -226,7 +229,9 @@ class SVAE:
                 )
 
                 # regularization
-                global_kld = prior_kld_lds((niw_param, mniw_param), (niw_prior, mniw_prior))
+                global_kld = prior_kld_lds(
+                    (niw_param, mniw_param), (niw_prior, mniw_prior)
+                )
                 kld_loss = (25 * global_kld + local_kld) / len(y)
 
                 loss = recon_loss + kld_weight * kld_loss

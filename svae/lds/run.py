@@ -10,7 +10,7 @@ from plot.gmm_plot import plot_loss
 from svae.lds import SVAE
 from vae import VAE
 
-LATENT_DIM = 10
+LATENT_DIM = 8
 
 hyperparameters = {
     "VAE_parameters": {
@@ -23,7 +23,7 @@ hyperparameters = {
     "SVAE_train_parameters": {
         "batch_size": 50,
         "epochs": 20,
-        "kld_weight": 0.30,
+        "kld_weight": 0.50,
         "latent_dim": LATENT_DIM,
     },
     "data_parameters": {
@@ -31,6 +31,7 @@ hyperparameters = {
         "T": 500,
         "num_steps": 5000,
         "render_sigma": 0.15,
+        "v": 0.75,
     },
 }
 
@@ -54,7 +55,7 @@ def main():
     network = get_network()
 
     model = SVAE(network, save_path=os.path.join(folder_name, "svae"))
-    # model.load_model("/var/tmp/vandenheu/SVAE/svae/lds/results/date:08_19-time:13_31_09/svae", 10)
+    # model.load_model("/var/tmp/vandenheu/SVAE/svae/lds/results/date:08_19-time:14_37_25/svae", 2)
     train_loss = model.fit(observations, **hyperparameters["SVAE_train_parameters"])
     plot_loss(
         train_loss, title="svae_loss", save_path=os.path.join(folder_name, "svae")
