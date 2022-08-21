@@ -12,6 +12,10 @@ from distributions.gaussian import (
 device = "cuda:0"
 
 
+def symmetrize(A):
+    return (A + A.T) / 2.0
+
+
 def is_posdef(A):
     return torch.allclose(A, A.T) and torch.all(torch.linalg.eigvalsh(A) >= 0.0)
 
@@ -47,23 +51,29 @@ def lognorm(J, h, full=False):
 
 
 def info_marginalize(J11, J12, J22, h, logZ):
-    T = lambda A: torch.swapaxes(A, axis0=-1, axis1=-2)
-    symmetrize = lambda A: (A + T(A)) / 2
+    # # assert logZ < 0
+    # # J11_inv = torch.inverse(J11)
+    # # temp = J12.T @ J11_inv
+    # temp = torch.linalg.solve(J11, J12)
+    #
+    # # J_pred = J22 - J12.T @ inv(J11) @ J12
+    # J_pred = symmetrize(J22 - temp @ J12)
+    # # h_pred = h2 - J12.T @ inv(J11) @ h1
+    # h_pred = -temp @ h
 
-    # assert logZ < 0
-    # J11_inv = torch.inverse(J11)
-    # temp = J12.T @ J11_inv
-    temp = torch.linalg.solve(J11, J12)
+    ###################
+    #     CHOL        #
+    ###################
 
-    # J_pred = J22 - J12.T @ inv(J11) @ J12
-    J_pred = symmetrize(J22 - temp @ J12)
-    # h_pred = h2 - J12.T @ inv(J11) @ h1
-    h_pred = -temp @ h
+    L = torch.linalg.cholesky(J11)
+    v = torch.linalg.solve_triangular(L, h[..., None], upper=False)
+
+    h_pred = -J12.T @ torch.linalg.solve_triangular(L.T, v, upper=False)
+    temp = torch.linalg.solve_triangular(L, J12, upper=False)
+    J_pred = J22 - temp.T @ temp
+
     # logZ_pred = logZ - 1/2 h1.T @ inv(J11) @ h1 + 1/2 log|J11| - n/2 log(2pi)
     logZ_pred = logZ - lognorm(J11, h)
-
-    # if logZ_pred >= 0:
-    #     raise ValueError("log normalization constant should be negative")
 
     if not is_posdef(J_pred):
         raise ValueError("Predicted matrix is not positive-definite")
