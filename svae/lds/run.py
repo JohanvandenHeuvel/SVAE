@@ -23,7 +23,7 @@ hyperparameters = {
     "SVAE_train_parameters": {
         "batch_size": 50,
         "epochs": 20,
-        "kld_weight": 0.50,
+        "kld_weight": 1.0,
         "latent_dim": LATENT_DIM,
     },
     "data_parameters": {

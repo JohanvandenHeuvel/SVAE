@@ -172,10 +172,10 @@ class SVAE:
         optimizer = torch.optim.Adam(self.vae.parameters(), lr=1e-3, weight_decay=1e-2)
         niw_optimizer = SGDOptim(step_size=1e-1)
         mniw_optimizer = [
-            SGDOptim(step_size=1e-3),
-            SGDOptim(step_size=1e-3),
-            SGDOptim(step_size=1e-3),
-            SGDOptim(step_size=1e-3),
+            SGDOptim(step_size=1e-1),
+            SGDOptim(step_size=1e-1),
+            SGDOptim(step_size=1e-1),
+            SGDOptim(step_size=1e-1),
         ]
 
         train_loss = []
@@ -194,9 +194,12 @@ class SVAE:
                 """
                 Find local optimum for local variational parameters eta_x, eta_z
                 """
-                (x, (E_init_stats, E_pair_stats), local_kld, _,) = local_optimization(
-                    potentials, (niw_param, mniw_param)
-                )
+                (
+                    x,
+                    (E_init_stats, E_pair_stats),
+                    local_kld,
+                    _,
+                ) = local_optimization(potentials, (niw_param, mniw_param))
 
                 """
                 Update global variational parameter eta_theta using natural gradient
@@ -232,7 +235,8 @@ class SVAE:
                 global_kld = prior_kld_lds(
                     (niw_param, mniw_param), (niw_prior, mniw_prior)
                 )
-                kld_loss = (25 * global_kld + local_kld) / len(y)
+                global_kld = 25 * global_kld
+                kld_loss = (global_kld + local_kld) / len(y)
 
                 loss = recon_loss + kld_weight * kld_loss
 
@@ -243,9 +247,18 @@ class SVAE:
                 optimizer.step()
 
                 total_loss.append((recon_loss.item(), kld_weight * kld_loss.item()))
+                total_loss.append(
+                    (
+                        recon_loss.item(),
+                        kld_weight * local_kld.item(),
+                        kld_weight * global_kld.item(),
+                    )
+                )
 
             train_loss.append(np.mean(total_loss, axis=0))
-            print(f"{epoch}: {train_loss[-1]}")
+            print(
+                f"[{epoch}/{epochs+1}] -- (reconstruction:{train_loss[-1][0]}) (local kld:{train_loss[-1][1]}) (global kld: {train_loss[-1][2]}"
+            )
 
             if epoch % max((epochs // 20), 1) == 0:
                 self.save_and_log(obs, epoch, (niw_param, mniw_param))
