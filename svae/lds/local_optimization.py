@@ -60,6 +60,8 @@ def info_marginalize(J11, J12, J22, h, logZ):
     # J_pred = symmetrize(J22 - temp @ J12)
     # # h_pred = h2 - J12.T @ inv(J11) @ h1
     # h_pred = -temp @ h
+    # logZ_pred = logZ - 1/2 h1.T @ inv(J11) @ h1 + 1/2 log|J11| - n/2 log(2pi)
+    # logZ_pred = logZ - lognorm(J11, h)
 
     ###################
     #     CHOL        #
@@ -72,13 +74,12 @@ def info_marginalize(J11, J12, J22, h, logZ):
     temp = torch.linalg.solve_triangular(L, J12, upper=False)
     J_pred = J22 - temp.T @ temp
 
-    # logZ_pred = logZ - 1/2 h1.T @ inv(J11) @ h1 + 1/2 log|J11| - n/2 log(2pi)
-    logZ_pred = logZ - lognorm(J11, h)
+    logZ_pred = logZ - 0.5 * v.T @ v - torch.sum(torch.log(torch.diag(L)))
 
     if not is_posdef(J_pred):
         raise ValueError("Predicted matrix is not positive-definite")
 
-    return J_pred, h_pred, logZ_pred
+    return J_pred, h_pred.squeeze(), logZ_pred.squeeze()
 
 
 def info_predict(J, h, J11, J12, J22, logZ):
@@ -91,7 +92,7 @@ def info_kalman_filter(init_params, pair_params, observations):
     J11, J12, J22, logZ = pair_params
 
     forward_messages = []
-    for (J_obs, h_obs) in observations:
+    for i, (J_obs, h_obs) in enumerate(observations):
         J_cond, h_cond = info_condition(J, h, J_obs, h_obs)
         J, h, logZ = info_predict(J_cond, h_cond, J11, J12, J22, logZ)
         forward_messages.append(((J_cond, h_cond), (J, h)))

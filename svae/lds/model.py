@@ -3,7 +3,6 @@ import os
 import numpy as np
 import torch
 from torch.utils.data import DataLoader
-from tqdm import tqdm
 
 from distributions.dense import pack_dense, unpack_dense
 from plot.lds_plot import plot
@@ -172,15 +171,15 @@ class SVAE:
         optimizer = torch.optim.Adam(self.vae.parameters(), lr=1e-3, weight_decay=1e-2)
         niw_optimizer = SGDOptim(step_size=1e-1)
         mniw_optimizer = [
-            SGDOptim(step_size=1e-1),
-            SGDOptim(step_size=1e-1),
-            SGDOptim(step_size=1e-1),
-            SGDOptim(step_size=1e-1),
+            SGDOptim(step_size=1e-2),
+            SGDOptim(step_size=1e-2),
+            SGDOptim(step_size=1e-2),
+            SGDOptim(step_size=1e-2),
         ]
 
         train_loss = []
         self.save_and_log(obs, "pre", (niw_param, mniw_param))
-        for epoch in tqdm(range(epochs + 1)):
+        for epoch in range(epochs + 1):
 
             total_loss = []
             for i, y in enumerate(dataloader):
@@ -205,14 +204,14 @@ class SVAE:
                 Update global variational parameter eta_theta using natural gradient
                 """
                 # update global param
-                # nat_grad_init = natural_gradient(
-                #     pack_dense(*E_init_stats),
-                #     niw_param,
-                #     niw_prior,
-                #     len(data),
-                #     num_batches,
-                # )
-                # niw_param = niw_optimizer.update(niw_param, torch.stack(nat_grad_init))
+                nat_grad_init = natural_gradient(
+                    pack_dense(*E_init_stats),
+                    niw_param,
+                    niw_prior,
+                    len(data),
+                    num_batches,
+                )
+                niw_param = niw_optimizer.update(niw_param, torch.stack(nat_grad_init))
 
                 nat_grad_pair = natural_gradient(
                     E_pair_stats, mniw_param, mniw_prior, len(data), num_batches
@@ -235,8 +234,7 @@ class SVAE:
                 global_kld = prior_kld_lds(
                     (niw_param, mniw_param), (niw_prior, mniw_prior)
                 )
-                global_kld = 25 * global_kld
-                kld_loss = (global_kld + local_kld) / len(y)
+                kld_loss = (global_kld + num_batches * local_kld) / len(y)
 
                 loss = recon_loss + kld_weight * kld_loss
 
@@ -246,7 +244,6 @@ class SVAE:
                 # update parameters
                 optimizer.step()
 
-                total_loss.append((recon_loss.item(), kld_weight * kld_loss.item()))
                 total_loss.append(
                     (
                         recon_loss.item(),
