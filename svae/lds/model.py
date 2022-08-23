@@ -4,6 +4,7 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 
+from distributions import MatrixNormalInverseWishart
 from distributions.dense import pack_dense, unpack_dense
 from plot.lds_plot import plot
 from svae.gradient import natural_gradient, AdamOptim, SGDOptim
@@ -180,6 +181,9 @@ class SVAE:
         train_loss = []
         self.save_and_log(obs, "pre", (niw_param, mniw_param))
         for epoch in range(epochs + 1):
+
+            A, _ = MatrixNormalInverseWishart(mniw_param).expected_standard_params()
+            print(np.array(sorted(torch.abs(torch.linalg.eigvals(A)).cpu().detach().numpy(), reverse=True)))
 
             total_loss = []
             for i, y in enumerate(dataloader):

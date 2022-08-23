@@ -58,6 +58,14 @@ class MatrixNormalInverseWishart(ExpDistribution):
 
         return -0.5 * E_T2, E_T3.T, -0.5 * E_T4, 0.5 * E_T1
 
+    def expected_standard_params(self):
+        J22, J12, J11, _ = self.expected_stats()
+        J22 = -2 * J22
+        J12 = -1 * J12
+        Q = torch.linalg.inv(J22)
+        A = -torch.linalg.solve(J22, J12).T
+        return A, Q
+
     def logZ(self):
         K, M, Phi, nu = self.natural_to_standard()
         p, _ = Phi.shape
