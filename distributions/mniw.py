@@ -4,6 +4,8 @@ from distributions.distribution import ExpDistribution
 
 from .niw import multidigamma
 
+from scipy.stats import invwishart, matrix_normal
+
 
 def symmetrize(A):
     return (A + A.T) / 2.0
@@ -11,6 +13,14 @@ def symmetrize(A):
 
 def is_posdef(A):
     return torch.allclose(A, A.T) and torch.all(torch.linalg.eigvalsh(A) > 0.0)
+
+
+def sample(M, K, Phi, nu):
+    # first sample Sigma from inverse-wishart
+    Sigma = invwishart.rvs(df=nu.item(), scale=Phi)
+    # second sample A from matrix-normal
+    A = matrix_normal.rvs(mean=M, rowcov=Sigma, colcov=K)
+    return A, Sigma
 
 
 class MatrixNormalInverseWishart(ExpDistribution):
@@ -40,7 +50,9 @@ class MatrixNormalInverseWishart(ExpDistribution):
         #     - multidigamma(nu / 2, n)
         # )
 
-        E_T2 = nu * torch.linalg.inv(symmetrize(Phi) + fudge * torch.eye(p, device=self.device))
+        E_T2 = nu * torch.linalg.inv(
+            symmetrize(Phi) + fudge * torch.eye(p, device=self.device)
+        )
         E_T3 = nu * torch.linalg.solve(Phi, M)
         E_T4 = (
             n * K
@@ -48,9 +60,9 @@ class MatrixNormalInverseWishart(ExpDistribution):
             + fudge * torch.eye(n, device=self.device)
         )
         E_T1 = (
-                - torch.slogdet(Phi)[1]
-                + n * torch.log(torch.tensor([2], device=self.device))
-                + multidigamma(nu / 2, n)
+            -torch.slogdet(Phi)[1]
+            + n * torch.log(torch.tensor([2], device=self.device))
+            + multidigamma(nu / 2, n)
         )
 
         # assert is_posdef(-2 * E_T2)
@@ -61,9 +73,9 @@ class MatrixNormalInverseWishart(ExpDistribution):
     def expected_standard_params(self):
         J22, J12, J11, _ = self.expected_stats()
         J22 = -2 * J22
-        J12 = -1 * J12
-        Q = torch.linalg.inv(J22)
+        J12 = -1 * J12.T
         A = -torch.linalg.solve(J22, J12).T
+        Q = torch.linalg.inv(J22)
         return A, Q
 
     def logZ(self):
@@ -93,3 +105,7 @@ class MatrixNormalInverseWishart(ExpDistribution):
         C = Phi + torch.matmul(M, B)
         d = nu
         return A, B, C, d
+
+    def sample(self):
+        K, M, Phi, nu = self.natural_to_standard()
+        return sample(M, K, Phi, nu)

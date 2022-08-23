@@ -77,7 +77,7 @@ class NormalInverseWishart(ExpDistribution):
         T = lambda A: torch.swapaxes(A, axis0=-1, axis1=-2)
         symmetrize = lambda A: (A + T(A)) / 2
 
-        E_T2 = -nu[..., None, None] / 2 * symmetrize(
+        E_T2 = -0.5 * nu[..., None, None] * symmetrize(
             torch.inverse(Phi)
         ) + 1e-8 * torch.eye(p, device=self.device)
         E_T3 = -2 * torch.bmm(E_T2, mu_0.unsqueeze(2)).squeeze(-1)
