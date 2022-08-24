@@ -120,7 +120,7 @@ class SVAE:
 
             # only use a subset of the data for plotting
             data = torch.tensor(obs).to(self.vae.device).float()
-            data = data[:100]
+            data = data[:300]
 
             # set the observations to zero after prefix
             prefix = 100
@@ -140,7 +140,7 @@ class SVAE:
             #     save_path=self.save_path,
             # )
 
-            plot_observations(obs=data.cpu().detach().numpy(), samples=samples.mean(0).cpu().detach().numpy())
+            plot_observations(obs=data.cpu().detach().numpy(), samples=samples.mean(0).cpu().detach().numpy(), save_path=self.save_path)
 
     def fit(self, obs, epochs, batch_size, latent_dim, kld_weight):
         """
