@@ -140,7 +140,12 @@ class SVAE:
             #     save_path=self.save_path,
             # )
 
-            plot_observations(obs=data.cpu().detach().numpy(), samples=samples.mean(0).cpu().detach().numpy(), save_path=self.save_path)
+            plot_observations(
+                obs=data.cpu().detach().numpy(),
+                samples=samples.mean(0).cpu().detach().numpy(),
+                title=f"epoch:{epoch}",
+                save_path=self.save_path,
+            )
 
     def fit(self, obs, epochs, batch_size, latent_dim, kld_weight):
         """
@@ -246,7 +251,7 @@ class SVAE:
                 global_kld = prior_kld_lds(
                     (niw_param, mniw_param), (niw_prior, mniw_prior)
                 )
-                kld_loss = (global_kld + num_batches * local_kld) / len(y)
+                kld_loss = (global_kld + local_kld) / len(y)
 
                 loss = recon_loss + kld_weight * kld_loss
 
