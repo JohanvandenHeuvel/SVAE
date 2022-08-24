@@ -1,7 +1,7 @@
 import torch
 
 from distributions import MatrixNormalInverseWishart, NormalInverseWishart
-from distributions.dense import pack_dense
+from matrix_ops import pack_dense, outer_product, is_posdef
 from distributions.gaussian import (
     info_to_standard,
     Gaussian,
@@ -12,27 +12,11 @@ from distributions.gaussian import (
 device = "cuda:0"
 
 
-def symmetrize(A):
-    return (A + A.T) / 2.0
-
-
-def is_posdef(A):
-    return torch.allclose(A, A.T) and torch.all(torch.linalg.eigvalsh(A) >= 0.0)
-
-
-def outer_product(x, y):
-    # computes xyT
-    return torch.einsum("i, j -> ij", (x, y))
-
-
 def info_condition(J, h, J_obs, h_obs):
-    assert torch.allclose(J, J.T)
     assert torch.all(torch.linalg.eigvalsh(J) >= 0.0)
 
-    assert torch.allclose(J_obs, J_obs.T)
     assert torch.all(torch.linalg.eigvalsh(J_obs) >= 0.0)
 
-    assert torch.allclose((J + J_obs), (J + J_obs).T)
     assert torch.all(torch.linalg.eigvalsh((J + J_obs)) >= 0.0)
 
     return J + J_obs, h + h_obs
@@ -76,8 +60,8 @@ def info_marginalize(J11, J12, J22, h, logZ):
 
     logZ_pred = logZ - 0.5 * v.T @ v - torch.sum(torch.log(torch.diag(L)))
 
-    if not is_posdef(J_pred):
-        raise ValueError("Predicted matrix is not positive-definite")
+    assert torch.allclose(J_pred, J_pred.T)
+    assert torch.all(torch.linalg.eigvalsh(J_pred) >= 0.0)
 
     return J_pred, h_pred.squeeze(), logZ_pred.squeeze()
 
@@ -132,7 +116,7 @@ def process_expected_stats(expected_stats):
         E_x, E_xxT, E_xnxT = a
         E_xn, E_xnxnT, _ = b
         # return E_xxT, E_xnxT.T, E_xnxnT, 1.0
-        return E_xnxnT, E_xnxT.T, E_xxT, 1.0
+        return E_xnxnT, E_xnxT.T, E_xxT, torch.tensor([1.0], device=E_x.device)
 
     def make_node_stats(a):
         E_x, E_xxT, _ = a

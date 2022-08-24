@@ -1,18 +1,11 @@
 import torch
 
 from distributions.distribution import ExpDistribution
+from matrix_ops import symmetrize
 
 from .niw import multidigamma
 
 from scipy.stats import invwishart, matrix_normal
-
-
-def symmetrize(A):
-    return (A + A.T) / 2.0
-
-
-def is_posdef(A):
-    return torch.allclose(A, A.T) and torch.all(torch.linalg.eigvalsh(A) > 0.0)
 
 
 def sample(M, K, Phi, nu):

@@ -1,12 +1,11 @@
 import os
-import pathlib
 
 import numpy as np
 import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from distributions.dense import pack_dense, unpack_dense
+from matrix_ops import pack_dense, unpack_dense
 from distributions import Gaussian
 from plot.gmm_plot import plot_reconstruction
 from svae.gmm.local_optimization import local_optimization
@@ -14,7 +13,7 @@ from svae.gmm.global_optimization import (
     initialize_global_gmm_parameters,
     prior_kld_gmm,
 )
-from svae.gradient import natural_gradient, gradient_descent
+from svae.gradient import natural_gradient, SGDOptim
 from vae import VAE
 
 
@@ -125,6 +124,7 @@ class SVAE:
         )
 
         optimizer = torch.optim.Adam(self.vae.parameters(), lr=1e-3, weight_decay=1e-3)
+        global_optmizer = SGDOptim(step_size=10)
 
         train_loss = []
         # self.save_and_log(obs, "pre", save_path, eta_theta)
@@ -155,7 +155,7 @@ class SVAE:
                 # do SGD on the natural gradient
                 eta_theta = tuple(
                     [
-                        gradient_descent(eta_theta[i], nat_grad[i], step_size=10)
+                        global_optmizer.update(eta_theta[i], nat_grad[i])
                         for i in range(len(eta_theta))
                     ]
                 )

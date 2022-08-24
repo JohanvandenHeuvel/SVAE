@@ -89,3 +89,64 @@ def unpack_dense(arr):
     """
     N = arr.shape[-1] - 2
     return arr[..., :N, :N], arr[..., :N, N], arr[..., N, N], arr[..., N + 1, N + 1]
+
+
+def is_posdef(A):
+    """
+    Check if matrix is positive definite. Raises ValueError if not.
+
+    Parameters
+    ----------
+    A:
+        Matrix.
+
+    Returns
+    -------
+
+    """
+    if not torch.allclose(A, A.T, atol=1e-6):
+        return False
+        raise ValueError(f"Matrix is not symmetric: \n {A.cpu().detach().numpy()}")
+
+    eigenvalues = torch.linalg.eigvalsh(A)
+    if not torch.all(eigenvalues >= 0.0):
+        return False
+        raise ValueError(f"Not all eigenvalues are symmetric: {eigenvalues}")
+
+    return True
+
+
+def batch_outer_product(x, y):
+    """Computes xyT.
+
+    e.g. if x.shape = (15, 2) and y.shape = (15, 2)
+    then we get that first element of result equals [[x_0 * y_0, x_0 * y_1], [x_1 * y_0, x_1 * y_1]]
+
+    """
+    return torch.einsum("bi, bj -> bij", (x, y))
+
+
+def batch_elementwise_multiplication(x, y):
+    """Computes x * y where the fist dimension is the batch, x is a scalar.
+
+    e.g. x.shape = (15, 1), y.shape = (15, 2, 2)
+    then we get that first element of result equals x[0] * y[0]
+
+    """
+    assert x.shape[1] == 1
+    return torch.einsum("ba, bij -> bij", (x, y))
+
+
+def batch_matrix_vector_product(A, b):
+    """Computes Ab for batch"""
+    return torch.einsum("bij, bj -> bi", (A, b))
+
+
+def outer_product(x, y):
+    # computes xyT
+    return torch.einsum("i, j -> ij", (x, y))
+
+
+def symmetrize(A):
+    T = lambda X: torch.swapaxes(X, axis0=-1, axis1=-2)
+    return (A + T(A)) / 2

@@ -4,38 +4,17 @@ import matplotlib.pyplot as plt
 from scipy.signal import sawtooth
 import torch
 
-from distributions.gaussian import standard_to_natural
-from distributions import Gaussian
 
-
-def make_lds_data(n, noise_scale=1e-1):
-    # State -> State matrices
-    A = torch.diag(torch.ones(1))
-    Q = torch.diag(torch.ones(1))
-    # State -> Observation matrices
-    C = torch.diag(torch.ones(1))
-    R = torch.diag(torch.ones(1))
-
-    init_params = standard_to_natural(
-        loc=torch.zeros(1).unsqueeze(0),
-        scale=torch.diag(torch.ones(1) * noise_scale).unsqueeze(0),
-    )
-    x_1 = Gaussian(nat_param=init_params).rsample()
-
-    x = [x_1]
-    y = []
-    for i in range(n):
-        old_x = x[i]
-
-        # compute next state
-        new_x = A @ old_x + Q @ torch.randn(1) * noise_scale
-        # compute observation
-        new_y = C @ old_x + R @ torch.randn(1) * noise_scale
-
+def make_lds_data(A, Q, C, R, T):
+    P, N = C.shape
+    x = [torch.randn(N)]
+    for t in range(T - 1):
+        old_x = x[t]
+        new_x = A @ old_x + Q @ torch.randn(N)
         x.append(new_x)
-        y.append(new_y)
-
-    return torch.stack(x[:n]).squeeze(), torch.stack(y).squeeze()
+    x = torch.stack(x)
+    y = x @ C.T + torch.randn(T, P) @ R.T
+    return y
 
 
 def make_dot_data(

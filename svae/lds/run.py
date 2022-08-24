@@ -1,29 +1,30 @@
 import os
 import sys
+import torch
 
 # add project root to PYTHONPATH
 sys.path.append(os.path.join(os.getcwd(), "SVAE"))
 
-from data import make_dot_data
+from data import make_lds_data
 from log import make_folder, save_dict
 from plot.gmm_plot import plot_loss
 from svae.lds import SVAE
-from vae import VAE
+from vae import VAE, resVAE
 
-LATENT_DIM = 8
+LATENT_DIM = 10
 
 hyperparameters = {
     "VAE_parameters": {
         "latent_dim": LATENT_DIM,
-        "input_size": 20,
+        "input_size": 2,
         "hidden_size": [50],
         "recon_loss": "likelihood",
         "name": "vae",
     },
     "SVAE_train_parameters": {
         "batch_size": 50,
-        "epochs": 20,
-        "kld_weight": 1.0,
+        "epochs": 100,
+        "kld_weight": 0.0,
         "latent_dim": LATENT_DIM,
     },
     "data_parameters": {
@@ -36,13 +37,28 @@ hyperparameters = {
 }
 
 
+def data_params():
+    def rot(theta):
+        s = torch.sin(theta)
+        c = torch.cos(theta)
+        return torch.stack([torch.stack([c, -s]), torch.stack([s, c])])
+
+    N = 2  # size parameter
+    A = 0.999 * rot(torch.tensor(2 * torch.pi / 30))
+    Q = 0.1 * torch.eye(N)
+    C = torch.eye(N)
+    R = 0.0001 * torch.eye(N)
+    return A, Q, C, R
+
+
 def get_data():
-    data = make_dot_data(**hyperparameters["data_parameters"])
+    A, Q, C, R = data_params()
+    data = make_lds_data(A, Q, C, R, T=900)
     return data
 
 
 def get_network():
-    network = VAE(**hyperparameters["VAE_parameters"])
+    network = resVAE(**hyperparameters["VAE_parameters"])
     return network
 
 

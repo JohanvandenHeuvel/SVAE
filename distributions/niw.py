@@ -1,6 +1,7 @@
 import torch
+import numpy as np
 
-from distributions.dense import pack_dense, unpack_dense
+from matrix_ops import pack_dense, unpack_dense, batch_outer_product, batch_elementwise_multiplication, is_posdef
 from .distribution import ExpDistribution
 
 from scipy.stats import invwishart, multivariate_normal
@@ -28,27 +29,6 @@ def make_batch(t: torch.Tensor):
         return t.unsqueeze(1)
 
 
-def batch_outer_product(x, y):
-    """Computes xyT.
-
-    e.g. if x.shape = (15, 2) and y.shape = (15, 2)
-    then we get that first element of result equals [[x_0 * y_0, x_0 * y_1], [x_1 * y_0, x_1 * y_1]]
-
-    """
-    return torch.einsum("bi, bj -> bij", (x, y))
-
-
-def batch_elementwise_multiplication(x, y):
-    """Computes x * y where the fist dimension is the batch, x is a scalar.
-
-    e.g. x.shape = (15, 1), y.shape = (15, 2, 2)
-    then we get that first element of result equals x[0] * y[0]
-
-    """
-    assert x.shape[1] == 1
-    return torch.einsum("ba, bij -> bij", (x, y))
-
-
 def sample(kappa, mu_0, Phi, nu, n=1):
     # first sample Sigma from inverse-wishart
     Sigma = invwishart.rvs(df=nu, scale=Phi, size=n)
@@ -72,14 +52,13 @@ class NormalInverseWishart(ExpDistribution):
         """
         kappa, mu_0, Phi, nu = self.natural_to_standard()
 
+        fudge = 1e-6
         _, p, _ = Phi.shape
 
-        T = lambda A: torch.swapaxes(A, axis0=-1, axis1=-2)
-        symmetrize = lambda A: (A + T(A)) / 2
-
-        E_T2 = -0.5 * nu[..., None, None] * symmetrize(
-            torch.inverse(Phi)
-        ) + 1e-8 * torch.eye(p, device=self.device)
+        E_T2 = (
+            -0.5 * nu[..., None, None] * torch.inverse(Phi)
+            + fudge * torch.eye(p, device=self.device)[None, ...]
+        )
         E_T3 = -2 * torch.bmm(E_T2, mu_0.unsqueeze(2)).squeeze(-1)
         E_T4 = -0.5 * (
             torch.bmm(mu_0.unsqueeze(1), E_T3.unsqueeze(2)).squeeze() + p / kappa
@@ -90,6 +69,8 @@ class NormalInverseWishart(ExpDistribution):
             - p * torch.log(torch.tensor([2], device=self.device))
             - multidigamma(nu / 2, p)
         )
+
+        assert torch.all(torch.linalg.eigvalsh((-2 * E_T2).squeeze()) >= 0.0)
 
         return pack_dense(E_T2, E_T3, E_T4, E_T1)
 
@@ -114,6 +95,9 @@ class NormalInverseWishart(ExpDistribution):
         Phi = eta_2 - batch_outer_product(eta_3, eta_3) / eta_4[..., None, None]
         # nu = eta_1 - p - 2
         nu = eta_1
+
+        assert torch.allclose(Phi.squeeze(), Phi.squeeze().T)
+        assert torch.all(torch.linalg.eigvalsh(Phi.squeeze()) >= 0.0)
 
         return kappa, mu_0, Phi, nu
 

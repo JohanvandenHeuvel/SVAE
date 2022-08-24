@@ -1,14 +1,9 @@
 import torch
 from scipy.stats import multivariate_normal
 
-from distributions.dense import pack_dense, unpack_dense
+from matrix_ops import pack_dense, unpack_dense
 from .distribution import ExpDistribution
 from torch.distributions import MultivariateNormal
-
-
-def batch_matrix_vector_product(A, b):
-    """Computes Ab for batch"""
-    return torch.einsum("bij, bj -> bi", (A, b))
 
 
 def sample(loc, Sigma, n=1):

@@ -27,6 +27,7 @@ def natural_gradient(
 
     value = []
     for i in range(len(eta_theta)):
+        assert eta_theta[i].shape == stats[i].shape
         value.append(nat_grad(eta_theta_prior[i], eta_theta[i], stats[i]))
 
     return value

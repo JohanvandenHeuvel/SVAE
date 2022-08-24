@@ -1,14 +1,30 @@
-import numpy as np
-
-import matplotlib.pyplot as plt
-from matplotlib.pyplot import cm
-
-import torch
-
 import os
 
+import matplotlib.pyplot as plt
+import numpy as np
+from matplotlib.pyplot import cm
 
-def plot_observations(ax, obs, prefix):
+
+def plot_observations(obs, samples, title="plot"):
+    N = obs.shape[-1]
+    fig, axs = plt.subplots(N, 1, figsize=(10, 10))
+
+    for n in range(N):
+        ax = axs[n]
+        ax.plot(obs[:, n], label="observed", alpha=0.8)
+        ax.plot(
+            samples[:, n], linestyle="dashed", label="sampled", alpha=0.8,
+        )
+        ax.legend()
+        ax.set_xlabel("time")
+        ax.set_ylabel("obs y")
+
+    plt.suptitle(title)
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_video_observations(ax, obs, prefix):
     """Plot 1d frames over time.
 
     Parameters
@@ -44,10 +60,21 @@ def plot_latents(ax, latents, mean, variance):
     for j in range(len(latents)):
         ax.plot(latents[j], "--", c=colors[j], alpha=0.8)
         ax.plot(mean[j], c=colors[j], alpha=0.8)
-        ax.fill_between(x, mean[j] - variance[j], mean[j] + variance[j], color=colors[j], alpha=0.1)
+        ax.fill_between(
+            x, mean[j] - variance[j], mean[j] + variance[j], color=colors[j], alpha=0.1
+        )
 
 
-def plot(obs, samples, latent_samples, latent_means, latent_vars, prefix=25, title=None, save_path=None):
+def plot(
+    obs,
+    samples,
+    latent_samples,
+    latent_means,
+    latent_vars,
+    prefix=25,
+    title=None,
+    save_path=None,
+):
     """
 
     Parameters
@@ -74,8 +101,8 @@ def plot(obs, samples, latent_samples, latent_means, latent_vars, prefix=25, tit
     for i in range(n_samples):
         ax = axs[:, i]
 
-        plot_observations(ax[0], obs.T, prefix)
-        plot_observations(ax[1], samples[i].T, prefix)
+        plot_video_observations(ax[0], obs.T, prefix)
+        plot_video_observations(ax[1], samples[i].T, prefix)
 
         variance = np.diagonal(
             latent_vars[i], offset=0, axis1=-2, axis2=-1
