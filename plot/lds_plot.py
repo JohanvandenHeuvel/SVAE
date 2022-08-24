@@ -5,7 +5,7 @@ import numpy as np
 from matplotlib.pyplot import cm
 
 
-def plot_observations(obs, samples, title="plot"):
+def plot_observations(obs, samples, title="plot", save_path=None):
     N = obs.shape[-1]
     fig, axs = plt.subplots(N, 1, figsize=(10, 10))
 
@@ -19,9 +19,16 @@ def plot_observations(obs, samples, title="plot"):
         ax.set_xlabel("time")
         ax.set_ylabel("obs y")
 
-    plt.suptitle(title)
-    plt.tight_layout()
-    plt.show()
+    fig.suptitle(title)
+    fig.tight_layout()
+    # save the figure to disk or show it
+    if save_path is not None:
+        if title is None:
+            raise ValueError(f"saving requires title but title is {title}")
+        fig.savefig(os.path.join(save_path, title))
+        plt.close(fig)
+    else:
+        plt.plot()
 
 
 def plot_video_observations(ax, obs, prefix):
