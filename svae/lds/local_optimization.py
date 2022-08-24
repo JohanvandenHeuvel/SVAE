@@ -58,7 +58,7 @@ def info_marginalize(J11, J12, J22, h, logZ):
     temp = torch.linalg.solve_triangular(L, J12, upper=False)
     J_pred = J22 - temp.T @ temp
 
-    logZ_pred = logZ - 0.5 * v.T @ v - torch.sum(torch.log(torch.diag(L)))
+    logZ_pred = logZ - 0.5 * v.T @ v + torch.sum(torch.log(torch.diag(L)))
 
     assert torch.allclose(J_pred, J_pred.T)
     assert torch.all(torch.linalg.eigvalsh(J_pred) >= 0.0)
