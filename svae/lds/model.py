@@ -11,6 +11,10 @@ from svae.lds.global_optimization import initialize_global_lds_parameters, prior
 from svae.lds.local_optimization import local_optimization
 from vae import VAE
 
+from distributions import MatrixNormalInverseWishart
+
+np.set_printoptions(edgeitems=30, linewidth=100000,
+    formatter=dict(float=lambda x: "%.3g" % x))
 
 class SVAE:
     def __init__(self, vae: VAE, save_path=None):
@@ -50,7 +54,7 @@ class SVAE:
         potentials = pack_dense(scale, mu)
         return potentials
 
-    def decode(self, x, sigmoid=False):
+    def decode(self, x, sigmoid=True):
         mu_y, log_var_y = self.vae.decode(x)
         # return torch.sigmoid(mu_y), torch.log1p(log_var_y.exp())
         if sigmoid:
@@ -63,7 +67,7 @@ class SVAE:
         mu_y, log_var_y = self.decode(x)
         return mu_y, log_var_y, x
 
-    def save_and_log(self, obs, epoch, eta_theta):
+    def save_and_log(self, data, epoch, eta_theta):
         def zero_out(prefix, potentials):
             """Zero out a part of the data.
 
@@ -88,7 +92,8 @@ class SVAE:
             n_samples: int
                 Number of samples.
             """
-            decoded_samples = []
+            decoded_means = []
+            decoded_vars = []
             latent_samples = []
             latent_means = []
             latent_vars = []
@@ -99,19 +104,21 @@ class SVAE:
                 )
                 sample = sample.squeeze()
                 # reconstruction
-                y, _ = self.decode(sample)
+                mu_y, log_var_y = self.decode(sample)
                 # save
-                decoded_samples.append(y)
+                decoded_means.append(mu_y)
+                decoded_vars.append(log_var_y)
                 latent_samples.append(sample)
                 latent_means.append(mean)
-                latent_vars.append(variance)
+                latent_vars.append(torch.diagonal(variance, dim1=-2, dim2=-1))
 
-            decoded_samples = torch.stack(decoded_samples)
+            decoded_means = torch.stack(decoded_means)
+            decoded_vars = torch.stack(decoded_vars)
             latent_samples = torch.stack(latent_samples)
             latent_means = torch.stack(latent_means)
             latent_vars = torch.stack(latent_vars)
 
-            return decoded_samples, latent_samples, latent_means, latent_vars
+            return decoded_means, decoded_vars, latent_samples, latent_means, latent_vars
 
         with torch.no_grad():
 
@@ -119,17 +126,16 @@ class SVAE:
             self.save_model(epoch)
 
             # only use a subset of the data for plotting
-            data = torch.tensor(obs).to(self.vae.device).float()
-            data = data[:300]
+            data = data[:100]
 
             # set the observations to zero after prefix
-            prefix = 100
+            prefix = 25
             potentials = self.encode(data)
             potentials = zero_out(prefix, potentials)
 
             # get samples
-            n_samples = 5
-            samples, latent_samples, latent_means, latent_vars = get_samples(n_samples)
+            n_samples = 1
+            decoded_means, decoded_vars, latent_samples, latent_means, latent_vars = get_samples(n_samples)
             # plot(
             #     obs=data.cpu().detach().numpy(),
             #     samples=samples.cpu().detach().numpy(),
@@ -142,8 +148,17 @@ class SVAE:
 
             plot_observations(
                 obs=data.cpu().detach().numpy(),
-                samples=samples.mean(0).cpu().detach().numpy(),
-                title=f"epoch:{epoch}",
+                samples=decoded_means.mean(0).cpu().detach().numpy(),
+                variance=decoded_vars.mean(0).cpu().detach().numpy(),
+                title=f"obs@epoch:{epoch}",
+                save_path=self.save_path,
+            )
+
+            plot_observations(
+                obs=latent_means.mean(0).cpu().detach().numpy(),
+                samples=latent_samples.mean(0).cpu().detach().numpy(),
+                variance=latent_vars.mean(0).cpu().detach().numpy(),
+                title=f"latents@epoch:{epoch}",
                 save_path=self.save_path,
             )
 
@@ -169,7 +184,11 @@ class SVAE:
         """
         Data setup 
         """
-        data = torch.tensor(obs).to(self.vae.device)
+        if not isinstance(obs, torch.Tensor):
+            data = torch.tensor(obs)
+        else:
+            data = obs.clone().detach()
+        data = data.to(self.vae.device).float()
         dataloader = torch.utils.data.DataLoader(
             data, batch_size=batch_size, shuffle=False
         )
@@ -185,25 +204,27 @@ class SVAE:
         """
         Optimizer setup 
         """
-        optimizer = torch.optim.Adam(self.vae.parameters(), lr=1e-3, weight_decay=1e-2)
+        optimizer = torch.optim.Adam(self.vae.parameters(), lr=1e-3)
         niw_optimizer = SGDOptim(step_size=1e-1)
         mniw_optimizer = [
-            SGDOptim(step_size=1e-2),
-            SGDOptim(step_size=1e-2),
-            SGDOptim(step_size=1e-2),
-            SGDOptim(step_size=1e-2),
+            SGDOptim(step_size=1e-1),
+            SGDOptim(step_size=1e-1),
+            SGDOptim(step_size=1e-1),
+            SGDOptim(step_size=1e-1),
         ]
 
         """
         Optimization loop 
         """
-        self.save_and_log(obs, "pre", (niw_param, mniw_param))
+        self.save_and_log(data, "pre", (niw_param, mniw_param))
         train_loss = []
         for epoch in range(epochs + 1):
 
+            A, _ = MatrixNormalInverseWishart(mniw_param).expected_standard_params()
+            print(torch.linalg.eigvalsh(A))
+
             total_loss = []
             for i, y in enumerate(dataloader):
-                y = y.float()
                 potentials = self.encode(y)
 
                 # remove dependency on previous iterations
@@ -251,7 +272,7 @@ class SVAE:
                 global_kld = prior_kld_lds(
                     (niw_param, mniw_param), (niw_prior, mniw_prior)
                 )
-                kld_loss = (global_kld + local_kld) / len(y)
+                kld_loss = (global_kld + num_batches * local_kld) / len(y)
 
                 loss = recon_loss + kld_weight * kld_loss
 
@@ -275,8 +296,8 @@ class SVAE:
                 print(
                     f"[{epoch}/{epochs + 1}] -- (recon:{train_loss[-1][0]}) (local kld:{train_loss[-1][1]}) (global kld: {train_loss[-1][2]})"
                 )
-                self.save_and_log(obs, epoch, (niw_param, mniw_param))
+                self.save_and_log(data, epoch, (niw_param, mniw_param))
 
         print("Finished training of the SVAE")
-        self.save_and_log(obs, "end", (niw_param, mniw_param))
+        self.save_and_log(data, "end", (niw_param, mniw_param))
         return train_loss

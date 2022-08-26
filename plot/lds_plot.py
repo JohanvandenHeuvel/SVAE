@@ -5,15 +5,19 @@ import numpy as np
 from matplotlib.pyplot import cm
 
 
-def plot_observations(obs, samples, title="plot", save_path=None):
+def plot_observations(obs, samples, variance, title="plot", save_path=None):
     N = obs.shape[-1]
-    fig, axs = plt.subplots(N, 1, figsize=(10, 10))
+    fig, axs = plt.subplots(N, 1, figsize=(10, N*4))
 
+    x = np.linspace(0, 100, 100)
     for n in range(N):
         ax = axs[n]
         ax.plot(obs[:, n], label="observed", alpha=0.8)
         ax.plot(
             samples[:, n], linestyle="dashed", label="sampled", alpha=0.8,
+        )
+        ax.fill_between(
+            x, obs[:, n] - variance[:, n], obs[:, n] + variance[:, n], alpha=0.1
         )
         ax.legend()
         ax.set_xlabel("time")

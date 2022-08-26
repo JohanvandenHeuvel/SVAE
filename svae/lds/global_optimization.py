@@ -32,10 +32,10 @@ def prior_kld_lds(eta_theta, eta_theta_prior):
 
     niw = NormalInverseWishart(niw_params)
     niw_prior = NormalInverseWishart(niw_params_prior)
-    niw_kld = exponential_kld(niw_prior, niw)
+    niw_kld = exponential_kld(niw, niw_prior)
 
     mniw = MatrixNormalInverseWishart(mniw_params)
     mniw_prior = MatrixNormalInverseWishart(mniw_params_prior)
-    mniw_kld = exponential_kld(mniw_prior, mniw)
+    mniw_kld = exponential_kld(mniw, mniw_prior)
 
     return mniw_kld + niw_kld

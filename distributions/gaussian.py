@@ -1,7 +1,7 @@
 import torch
 from scipy.stats import multivariate_normal
 
-from matrix_ops import pack_dense, unpack_dense
+from matrix_ops import pack_dense, unpack_dense, is_posdef
 from .distribution import ExpDistribution
 from torch.distributions import MultivariateNormal
 
@@ -146,4 +146,4 @@ class Gaussian(ExpDistribution):
         # samples = loc + scale * eps
         #
         # return samples
-        return MultivariateNormal(loc, scale).rsample()
+        return MultivariateNormal(loc, scale.squeeze()).rsample()

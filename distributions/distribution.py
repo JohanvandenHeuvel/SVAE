@@ -46,23 +46,21 @@ class ExpDistribution(ABC):
         self._nat_param = value
 
 
-def exponential_kld(dist_1: ExpDistribution, dist_2: ExpDistribution, expected_stats=None) -> float:
-    if expected_stats is None:
-        expected_stats = dist_1.expected_stats()
+def exponential_kld(dist_1: ExpDistribution, dist_2: ExpDistribution) -> float:
     # TODO sometimes gives negative values
-    P = dist_1.nat_param
-    Q = dist_2.nat_param
-    if isinstance(P, List):
-        value = [torch.flatten(P[i] - Q[i]) @ torch.flatten(expected_stats[i]) for i in range(len(P))]
+    expected_stats = dist_1.expected_stats()
+    eta_1 = dist_1.nat_param
+    eta_2 = dist_2.nat_param
+    if isinstance(eta_1, List):
+        value = [torch.flatten(eta_1[i] - eta_2[i]) @ torch.flatten(expected_stats[i]) for i in range(len(eta_1))]
         value = torch.sum(torch.stack(value))
         value = value - dist_1.logZ().item() + dist_2.logZ().item()
     else:
         value = (
-            torch.flatten((P - Q))
+            torch.flatten((eta_1 - eta_2))
             @ torch.flatten(expected_stats)
             - dist_1.logZ()
             + dist_2.logZ()
         )
         value = value.item()
-    # assert value >= 0
     return value

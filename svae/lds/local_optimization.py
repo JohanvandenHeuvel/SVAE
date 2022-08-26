@@ -1,7 +1,7 @@
 import torch
 
 from distributions import MatrixNormalInverseWishart, NormalInverseWishart
-from matrix_ops import pack_dense, outer_product, is_posdef
+from matrix_ops import pack_dense, outer_product, is_posdef, unpack_dense
 from distributions.gaussian import (
     info_to_standard,
     Gaussian,
@@ -50,17 +50,20 @@ def info_marginalize(J11, J12, J22, h, logZ):
     ###################
     #     CHOL        #
     ###################
+    n = len(J11)
 
     L = torch.linalg.cholesky(J11)
     v = torch.linalg.solve_triangular(L, h[..., None], upper=False)
+
+    # A = J12.T @ torch.linalg.inv(J11)
+    # print(torch.max(torch.linalg.svdvals(A)))
 
     h_pred = -J12.T @ torch.linalg.solve_triangular(L.T, v, upper=False)
     temp = torch.linalg.solve_triangular(L, J12, upper=False)
     J_pred = J22 - temp.T @ temp
 
-    logZ_pred = logZ - 0.5 * v.T @ v + torch.sum(torch.log(torch.diag(L)))
+    logZ_pred = logZ + (0.5 * v.T @ v - torch.sum(torch.log(torch.diag(L))))
 
-    assert torch.allclose(J_pred, J_pred.T)
     assert torch.all(torch.linalg.eigvalsh(J_pred) >= 0.0)
 
     return J_pred, h_pred.squeeze(), logZ_pred.squeeze()
@@ -77,6 +80,9 @@ def info_kalman_filter(init_params, pair_params, observations):
 
     forward_messages = []
     for i, (J_obs, h_obs) in enumerate(observations):
+        # print(
+        #     f"J:{torch.norm(J)}, h:{torch.norm(h)}, J_obs:{torch.norm(J_obs)}, h_obs:{torch.norm(h_obs)}"
+        # )
         J_cond, h_cond = info_condition(J, h, J_obs, h_obs)
         J, h, logZ = info_predict(J_cond, h_cond, J11, J12, J22, logZ)
         forward_messages.append(((J_cond, h_cond), (J, h)))
@@ -115,8 +121,8 @@ def process_expected_stats(expected_stats):
     def make_pair_stats(a, b):
         E_x, E_xxT, E_xnxT = a
         E_xn, E_xnxnT, _ = b
-        # return E_xxT, E_xnxT.T, E_xnxnT, 1.0
-        return E_xnxnT, E_xnxT.T, E_xxT, torch.tensor([1.0], device=E_x.device)
+        return E_xxT, E_xnxT.T, E_xnxnT, torch.tensor([1.0], device=E_x.device)
+        # return E_xnxnT, E_xnxT.T, E_xxT, torch.tensor([1.0], device=E_x.device)
 
     def make_node_stats(a):
         E_x, E_xxT, _ = a
@@ -162,6 +168,8 @@ def info_sample_backward(forward_messages, pair_params):
     J11, J12, _ = pair_params
 
     _, (J_pred, h_pred) = forward_messages[-1]
+    assert torch.isclose(J_pred, J_pred.mT, atol=1e-6).all(-2).all(-1)
+    assert torch.linalg.cholesky_ex(J_pred).info.eq(0)
     next_sample = Gaussian(info_to_natural(J_pred, h_pred)).rsample()
 
     samples = [next_sample]
