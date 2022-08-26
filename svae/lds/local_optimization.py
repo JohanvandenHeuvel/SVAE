@@ -152,7 +152,7 @@ def process_expected_stats(expected_stats):
 
 
 def info_kalman_smoothing(forward_messages, pair_params):
-    _, (J_smooth, h_smooth) = forward_messages[-1]
+    (J_smooth, h_smooth), _ = forward_messages[-1]
     loc, scale = info_to_standard(J_smooth, h_smooth)
     E_xxT = scale + outer_product(loc, loc)
     E_xnxT = 0.0
