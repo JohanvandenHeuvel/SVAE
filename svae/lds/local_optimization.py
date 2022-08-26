@@ -111,7 +111,7 @@ def info_rst_smoothing(J, h, cond_msg, pred_msg, pair_params, loc_next):
     E_xnxT = temp @ scale + outer_product(loc_next, loc)
     E_xxT = scale + outer_product(loc, loc)
 
-    stats = (loc, E_xxT, E_xnxT)
+    stats = (loc, E_xxT, -E_xnxT)
 
     return J_smooth, h_smooth, stats
 
