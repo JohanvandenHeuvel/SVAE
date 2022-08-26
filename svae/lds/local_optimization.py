@@ -24,6 +24,7 @@ def info_condition(J, h, J_obs, h_obs):
 
 def condition(J, h, y, Jxx, Jxy):
     J_cond = J + Jxx
+    # TODO +?
     h_cond = h - (Jxy @ y.T).T
     return J_cond, h_cond
 
@@ -62,11 +63,11 @@ def info_marginalize(J11, J12, J22, h, logZ):
     temp = torch.linalg.solve_triangular(L, J12, upper=False)
     J_pred = J22 - temp.T @ temp
 
-    logZ_pred = logZ + (0.5 * v.T @ v - torch.sum(torch.log(torch.diag(L))))
+    logZ_pred = 0.5 * v.T @ v - torch.sum(torch.log(torch.diag(L)))
 
     assert torch.all(torch.linalg.eigvalsh(J_pred) >= 0.0)
 
-    return J_pred, h_pred.squeeze(), logZ_pred.squeeze()
+    return J_pred, h_pred.squeeze(), logZ_pred.squeeze() + logZ
 
 
 def info_predict(J, h, J11, J12, J22, logZ):
@@ -76,18 +77,25 @@ def info_predict(J, h, J11, J12, J22, logZ):
 
 def info_kalman_filter(init_params, pair_params, observations):
     J, h = init_params
-    J11, J12, J22, logZ = pair_params
+    J11, J12, J22, logZ_param = pair_params
 
+    # TODO logZ in init_params
+    # total_logZ = init_params[2]
+    total_logZ = 0
     forward_messages = []
     for i, (J_obs, h_obs) in enumerate(observations):
         # print(
         #     f"J:{torch.norm(J)}, h:{torch.norm(h)}, J_obs:{torch.norm(J_obs)}, h_obs:{torch.norm(h_obs)}"
         # )
         J_cond, h_cond = info_condition(J, h, J_obs, h_obs)
-        J, h, logZ = info_predict(J_cond, h_cond, J11, J12, J22, logZ)
+        J, h, logZ = info_predict(J_cond, h_cond, J11, J12, J22, logZ_param)
+        total_logZ += logZ
         forward_messages.append(((J_cond, h_cond), (J, h)))
 
-    return forward_messages, logZ
+    # TODO logZ of last message?
+    # logZ += lognorm(J, h)
+
+    return forward_messages, total_logZ
 
 
 def info_rst_smoothing(J, h, cond_msg, pred_msg, pair_params, loc_next):
@@ -242,9 +250,9 @@ def local_optimization(potentials, eta_theta):
     niw_param, mniw_param = eta_theta
 
     J22, J12, J11, logZ = MatrixNormalInverseWishart(mniw_param).expected_stats()
-    J11 *= -2
-    J12 *= -1
-    J22 *= -2
+    J11 = -2 * J11
+    J12 = -1 * J12
+    J22 = -2 * J22
 
     """
     optimize local parameters
