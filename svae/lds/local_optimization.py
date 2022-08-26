@@ -249,7 +249,7 @@ def local_optimization(potentials, eta_theta):
     """
     niw_param, mniw_param = eta_theta
 
-    J22, J12, J11, logZ = MatrixNormalInverseWishart(mniw_param).expected_stats()
+    J11, J12, J22, logZ = MatrixNormalInverseWishart(mniw_param).expected_stats()
     J11 = -2 * J11
     J12 = -1 * J12
     J22 = -2 * J22

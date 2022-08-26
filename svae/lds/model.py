@@ -14,7 +14,8 @@ from vae import VAE
 from distributions import MatrixNormalInverseWishart
 
 np.set_printoptions(edgeitems=30, linewidth=100000,
-    formatter=dict(float=lambda x: "%.3g" % x))
+                    formatter=dict(float=lambda x: "%.3g" % x))
+
 
 class SVAE:
     def __init__(self, vae: VAE, save_path=None):
@@ -46,19 +47,25 @@ class SVAE:
         # global parameters
         self.eta_theta = torch.load(os.path.join(path, f"eta_theta_{epoch}.pt"))
 
-    def encode(self, y):
+    def encode(self, y, tanh=True):
         mu, log_var = self.vae.encode(y)
-        # scale should be positive, and thus it's negative inverse should be negative
-        scale = -torch.exp(0.5 * log_var)
+
+        if tanh:
+            scale = -0.5 * torch.exp(torch.tanh(log_var / 10) * 10)
+        else:
+            # scale should be positive, and thus it's negative inverse should be negative
+            scale = -torch.exp(0.5 * log_var)
         # scale = -0.5 * torch.log1p(torch.exp(log_var))
         potentials = pack_dense(scale, mu)
         return potentials
 
-    def decode(self, x, sigmoid=True):
+    def decode(self, x, sigmoid=True, tanh=True):
         mu_y, log_var_y = self.vae.decode(x)
         # return torch.sigmoid(mu_y), torch.log1p(log_var_y.exp())
         if sigmoid:
             mu_y = torch.sigmoid(mu_y)
+        if tanh:
+            log_var_y = torch.tanh(log_var_y / 10) * 10
         return mu_y, log_var_y
 
     def forward(self, y):
@@ -121,7 +128,6 @@ class SVAE:
             return decoded_means, decoded_vars, latent_samples, latent_means, latent_vars
 
         with torch.no_grad():
-
             self.eta_theta = eta_theta
             self.save_model(epoch)
 
@@ -147,8 +153,8 @@ class SVAE:
             # )
 
             plot_observations(
-                obs=data.cpu().detach().numpy(),
-                samples=decoded_means.mean(0).cpu().detach().numpy(),
+                obs=decoded_means.mean(0).cpu().detach().numpy(),
+                samples=data.cpu().detach().numpy(),
                 variance=decoded_vars.mean(0).cpu().detach().numpy(),
                 title=f"obs@epoch:{epoch}",
                 save_path=self.save_path,
@@ -205,23 +211,21 @@ class SVAE:
         Optimizer setup 
         """
         optimizer = torch.optim.Adam(self.vae.parameters(), lr=1e-3)
-        niw_optimizer = SGDOptim(step_size=1e-1)
+        niw_optimizer = SGDOptim(step_size=1)
         mniw_optimizer = [
-            SGDOptim(step_size=1e-1),
-            SGDOptim(step_size=1e-1),
-            SGDOptim(step_size=1e-1),
-            SGDOptim(step_size=1e-1),
+            SGDOptim(step_size=1),
+            SGDOptim(step_size=1),
+            SGDOptim(step_size=1),
+            SGDOptim(step_size=1),
         ]
 
         """
         Optimization loop 
         """
-        self.save_and_log(data, "pre", (niw_param, mniw_param))
+        # self.save_and_log(data, "pre", (niw_param, mniw_param))
         train_loss = []
         for epoch in range(epochs + 1):
 
-            A, _ = MatrixNormalInverseWishart(mniw_param).expected_standard_params()
-            print(torch.linalg.eigvalsh(A))
 
             total_loss = []
             for i, y in enumerate(dataloader):
@@ -229,13 +233,21 @@ class SVAE:
 
                 # remove dependency on previous iterations
                 niw_param = niw_param.detach()
-                mniw_param = tuple([p.detach() for p in mniw_param])
+                niw_param.requires_grad = True
+                mniw_param = list([p.detach() for p in mniw_param])
+                for p in mniw_param:
+                    p.requires_grad = True
 
                 """
                 Find local optimum for local variational parameters eta_x, eta_z
                 """
                 (x, (E_init_stats, E_pair_stats), local_kld, _,) = local_optimization(
                     potentials, (niw_param, mniw_param)
+                )
+
+                # regularization
+                global_kld = prior_kld_lds(
+                    (niw_param, mniw_param), (niw_prior, mniw_prior)
                 )
 
                 """
@@ -268,13 +280,11 @@ class SVAE:
                     y, mu_y.squeeze(), log_var_y.squeeze()
                 )
 
-                # regularization
-                global_kld = prior_kld_lds(
-                    (niw_param, mniw_param), (niw_prior, mniw_prior)
-                )
-                kld_loss = (global_kld + num_batches * local_kld) / len(y)
+                local_kld = (num_batches * local_kld) / len(y)
+                kld_loss = (global_kld + local_kld)
 
                 loss = recon_loss + kld_weight * kld_loss
+                # loss = global_kld
 
                 optimizer.zero_grad()
                 # compute gradients
@@ -296,6 +306,8 @@ class SVAE:
                 print(
                     f"[{epoch}/{epochs + 1}] -- (recon:{train_loss[-1][0]}) (local kld:{train_loss[-1][1]}) (global kld: {train_loss[-1][2]})"
                 )
+                A, _ = MatrixNormalInverseWishart(mniw_param).expected_standard_params()
+                print(torch.linalg.eigvalsh(A))
                 self.save_and_log(data, epoch, (niw_param, mniw_param))
 
         print("Finished training of the SVAE")

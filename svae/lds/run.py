@@ -16,22 +16,22 @@ LATENT_DIM = 10
 hyperparameters = {
     "VAE_parameters": {
         "latent_dim": LATENT_DIM,
-        "input_size": 20,
+        "input_size": 12,
         "hidden_size": [50],
         "recon_loss": "likelihood",
         "name": "vae",
     },
     "SVAE_train_parameters": {
-        "batch_size": 50,
+        "batch_size": 80,
         "epochs": 100,
-        "kld_weight": 0.5,
+        "kld_weight": 1.0,
         "latent_dim": LATENT_DIM,
     },
     "data_parameters": {
-        "image_width": 20,
+        "image_width": 12,
         "T": 500,
         "num_steps": 5000,
-        "render_sigma": 0.15,
+        "render_sigma": 0.20,
         "v": 0.75,
     },
 }

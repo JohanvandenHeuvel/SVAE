@@ -1,19 +1,17 @@
 import torch
-import numpy as np
 
-from matrix_ops import pack_dense, unpack_dense, batch_outer_product, batch_elementwise_multiplication, is_posdef
+from matrix_ops import (
+    pack_dense,
+    unpack_dense,
+    batch_outer_product,
+    batch_elementwise_multiplication,
+)
 from .distribution import ExpDistribution
+from distributions import MatrixNormalInverseWishart
 
 from scipy.stats import invwishart, multivariate_normal
 
-
-def multidigamma(input, p):
-    arr = torch.arange(0, p, device=input.device)
-    # input[..., None] - arr[None, ...] is like [input - i for i in range(p)] excluding somme list manipulation
-    values = torch.digamma(input[..., None] - arr[None, ...] / 2)
-    # sum over values of p
-    result = torch.sum(values, dim=-1)
-    return result
+from .mniw import multidigamma
 
 
 def is_batch(t: torch.Tensor):
@@ -50,29 +48,43 @@ class NormalInverseWishart(ExpDistribution):
         E[T3] = E[inv(Sigma) mu]
         E[T4] = E[-1/2 muT inv(Sigma) mu]
         """
-        kappa, mu_0, Phi, nu = self.natural_to_standard()
 
-        fudge = 1e-6
-        _, p, _ = Phi.shape
-
-        E_T2 = (
-            -0.5 * nu[..., None, None] * torch.inverse(Phi)
-            + fudge * torch.eye(p, device=self.device)[None, ...]
+        A, b, c, d = unpack_dense(self.nat_param)
+        # TODO Phi (S) and K are mixed up?
+        mniw = MatrixNormalInverseWishart(
+            [
+                A.squeeze(),
+                b.squeeze().unsqueeze(-1),
+                torch.tensor([[c]], device=self.device),
+                d,
+            ]
         )
-        E_T3 = -2 * torch.bmm(E_T2, mu_0.unsqueeze(2)).squeeze(-1)
-        E_T4 = -0.5 * (
-            torch.bmm(mu_0.unsqueeze(1), E_T3.unsqueeze(2)).squeeze() + p / kappa
-        )
-        # TODO are the signs here correct?
-        E_T1 = -0.5 * (
-            torch.slogdet(Phi)[1]
-            - p * torch.log(torch.tensor([2], device=self.device))
-            - multidigamma(nu / 2, p)
-        )
+        stats = mniw.expected_stats()
 
-        assert torch.all(torch.linalg.eigvalsh((-2 * E_T2).squeeze()) >= 0.0)
-
-        return pack_dense(E_T2, E_T3, E_T4, E_T1)
+        # kappa, mu_0, Phi, nu = self.natural_to_standard()
+        #
+        # fudge = 1e-6
+        # _, p, _ = Phi.shape
+        #
+        # E_T2 = (
+        #     -0.5 * nu[..., None, None] * torch.inverse(Phi)
+        #     + fudge * torch.eye(p, device=self.device)[None, ...]
+        # )
+        # E_T3 = -2 * torch.bmm(E_T2, mu_0.unsqueeze(2)).squeeze(-1)
+        # E_T4 = -0.5 * (
+        #     torch.bmm(mu_0.unsqueeze(1), E_T3.unsqueeze(2)).squeeze() + p / kappa
+        # )
+        # # TODO are the signs here correct?
+        # E_T1 = -0.5 * (
+        #     torch.slogdet(Phi)[1]
+        #     - p * torch.log(torch.tensor([2], device=self.device))
+        #     - multidigamma(nu / 2, p)
+        # )
+        #
+        # assert torch.all(torch.linalg.eigvalsh((-2 * E_T2).squeeze()) >= 0.0)
+        #
+        # return pack_dense(E_T2, E_T3, E_T4, E_T1)
+        return pack_dense(stats[0], stats[1].squeeze(), stats[2].squeeze(), stats[3])
 
     def logZ(self):
         kappa, mu_0, Phi, nu = self.natural_to_standard()
@@ -96,8 +108,8 @@ class NormalInverseWishart(ExpDistribution):
         # nu = eta_1 - p - 2
         nu = eta_1
 
-        assert torch.allclose(Phi.squeeze(), Phi.squeeze().T)
-        assert torch.all(torch.linalg.eigvalsh(Phi.squeeze()) >= 0.0)
+        # assert torch.allclose(Phi.squeeze(), Phi.squeeze().T, atol=1e-6)
+        # assert torch.all(torch.linalg.eigvalsh(Phi.squeeze()) >= 0.0)
 
         return kappa, mu_0, Phi, nu
 

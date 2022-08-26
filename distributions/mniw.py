@@ -3,8 +3,6 @@ import torch
 from distributions.distribution import ExpDistribution
 from matrix_ops import symmetrize
 
-from .niw import multidigamma
-
 from scipy.stats import invwishart, matrix_normal
 
 
@@ -61,10 +59,11 @@ class MatrixNormalInverseWishart(ExpDistribution):
         # assert is_posdef(-2 * E_T2)
         # assert is_posdef(-2 * E_T4)
 
-        return -0.5 * E_T2, E_T3.T, -0.5 * E_T4, 0.5 * E_T1
+        # return -0.5 * E_T2, E_T3.T, -0.5 * E_T4, 0.5 * E_T1
+        return -0.5 * E_T4, E_T3.T, -0.5 * E_T2, 0.5 * E_T1
 
     def expected_standard_params(self):
-        J22, J12, J11, _ = self.expected_stats()
+        J11, J12, J22, _ = self.expected_stats()
         J22 = -2 * J22
         J12 = -1 * J12.T
         A = -torch.linalg.solve(J22, J12).T
@@ -102,3 +101,12 @@ class MatrixNormalInverseWishart(ExpDistribution):
     def sample(self):
         K, M, Phi, nu = self.natural_to_standard()
         return sample(M, K, Phi, nu)
+
+
+def multidigamma(input, p):
+    arr = torch.arange(0, p, device=input.device)
+    # input[..., None] - arr[None, ...] is like [input - i for i in range(p)] excluding somme list manipulation
+    values = torch.digamma(input[..., None] - arr[None, ...] / 2)
+    # sum over values of p
+    result = torch.sum(values, dim=-1)
+    return result

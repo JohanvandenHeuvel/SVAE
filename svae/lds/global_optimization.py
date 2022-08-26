@@ -6,7 +6,7 @@ from distributions import NormalInverseWishart, MatrixNormalInverseWishart, expo
 def initialize_global_lds_parameters(n, scale=1.0):
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-    nu = torch.tensor([n + 1])
+    nu = torch.tensor([n + 1]).float()
     Phi = 2 * scale * (n + 1) * torch.eye(n)
     mu_0 = torch.zeros(n)
     kappa = torch.tensor([1 / (2 * scale * n)])
