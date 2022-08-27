@@ -5,7 +5,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from matrix_ops import pack_dense, unpack_dense
-from plot.lds_plot import plot_observations
+from plot.lds_plot import plot_observations, plot
 from svae.gradient import natural_gradient, SGDOptim
 from svae.lds.global_optimization import initialize_global_lds_parameters, prior_kld_lds
 from svae.lds.local_optimization import local_optimization
@@ -127,15 +127,13 @@ class SVAE:
             # get samples
             n_samples = 5
             decoded_means, decoded_vars, latent_samples = get_samples(n_samples)
-            # plot(
-            #     obs=data.cpu().detach().numpy(),
-            #     samples=samples.cpu().detach().numpy(),
-            #     latent_samples=latent_samples.cpu().detach().numpy(),
-            #     latent_means=latent_means.cpu().detach().numpy(),
-            #     latent_vars=latent_vars.cpu().detach().numpy(),
-            #     title=f"epoch:{epoch}",
-            #     save_path=self.save_path,
-            # )
+
+            plot(
+                obs=data.cpu().detach().numpy(),
+                samples=decoded_means.mean(0).cpu().detach().numpy(),
+                title=f"epoch:{epoch}",
+                save_path=self.save_path,
+            )
 
             plot_observations(
                 obs=decoded_means.mean(0).cpu().detach().numpy(),

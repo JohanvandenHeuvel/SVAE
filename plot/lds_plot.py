@@ -79,9 +79,6 @@ def plot_latents(ax, latents, mean, variance):
 def plot(
     obs,
     samples,
-    latent_samples,
-    latent_means,
-    latent_vars,
     prefix=25,
     title=None,
     save_path=None,
@@ -107,18 +104,9 @@ def plot(
     save_path: String
         where to save the plot
     """
-    n_samples = len(samples)
-    fig, axs = plt.subplots(3, n_samples, figsize=(n_samples * 10, 10))
-    for i in range(n_samples):
-        ax = axs[:, i]
-
-        plot_video_observations(ax[0], obs.T, prefix)
-        plot_video_observations(ax[1], samples[i].T, prefix)
-
-        variance = np.diagonal(
-            latent_vars[i], offset=0, axis1=-2, axis2=-1
-        )  # de-diagonalize
-        plot_latents(ax[2], latent_samples[i].T, latent_means[i].T, variance.T)
+    fig, axs = plt.subplots(2, 1, figsize=(20, 10))
+    plot_video_observations(axs[0], obs.T, prefix)
+    plot_video_observations(axs[1], samples.T, prefix)
 
     fig.suptitle(title)
     fig.tight_layout()
