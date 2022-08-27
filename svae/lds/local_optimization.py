@@ -172,35 +172,23 @@ def info_kalman_smoothing(forward_messages, pair_params):
     return list(reversed(backward_messages)), expected_stats
 
 
-def info_sample_backward(forward_messages, pair_params):
+def info_sample_backward(forward_messages, pair_params, n_samples):
     J11, J12, _ = pair_params
-
-    _, (J_pred, h_pred) = forward_messages[-1]
-    assert torch.isclose(J_pred, J_pred.mT, atol=1e-6).all(-2).all(-1)
-    assert torch.linalg.cholesky_ex(J_pred).info.eq(0)
-    next_sample = Gaussian(info_to_natural(J_pred, h_pred)).rsample()
+    (J_cond, h_cond), _ = forward_messages[-1]
+    next_sample = Gaussian(info_to_natural(J_cond, h_cond)).rsample(n_samples=n_samples)
 
     samples = [next_sample]
-
-    means = [h_pred]
-    variances = [-2 * J_pred]
-    for _, (J_pred, h_pred) in reversed(forward_messages[:-1]):
-        J = J_pred + J11
-        h = h_pred - next_sample @ J12.T
-
-        # get the sample
-        state = Gaussian(info_to_natural(J, h.squeeze(0)))
-        next_sample = state.rsample()
+    for (J_cond, h_cond), _ in reversed(forward_messages[:-1]):
+        J = J_cond + J11
+        h = h_cond - next_sample @ J12.T
+        # Sample from multiple Gaussians using as mean [h_0, ..., h_i, ...]
+        # and block matrix with J on the diagonal as variance.
+        _J = torch.kron(torch.eye(len(h), device=J.device), J.contiguous())
+        _h = h.flatten()
+        next_sample = Gaussian(info_to_natural(_J, _h)).rsample().reshape(len(h), len(J))
         samples.append(next_sample)
-
-        means.append(h.squeeze(0))
-        variances.append(-2 * J)
-
     samples = torch.stack(list(reversed(samples)))
-    variances = torch.stack(list(reversed(variances)))
-    means = torch.stack(list(reversed(means)))
-
-    return samples, (means, variances)
+    return samples
 
 
 def info_observation_params(obs, C, R):
@@ -241,7 +229,7 @@ def sample_backward_messages(messages):
     return samples
 
 
-def local_optimization(potentials, eta_theta):
+def local_optimization(potentials, eta_theta, n_samples=1):
     y = list(zip(*natural_to_info(potentials)))
 
     """
@@ -267,8 +255,8 @@ def local_optimization(potentials, eta_theta):
         forward_messages, pair_params=(J11, J12, J22)
     )
 
-    samples, (means, variances) = info_sample_backward(
-        forward_messages, pair_params=(J11, J12, J22)
+    samples = info_sample_backward(
+        forward_messages, pair_params=(J11, J12, J22), n_samples=n_samples
     )
 
     E_init_stats, E_pair_stats, E_node_stats = expected_stats
@@ -279,4 +267,4 @@ def local_optimization(potentials, eta_theta):
         - logZ
     )
 
-    return samples, (E_init_stats, E_pair_stats), local_kld, (means, variances)
+    return samples, (E_init_stats, E_pair_stats), local_kld

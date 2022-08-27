@@ -130,20 +130,7 @@ class Gaussian(ExpDistribution):
         h = J @ loc
         return J, h
 
-    def rsample(self, num_samples=1):
+    def rsample(self, n_samples=1):
         """get samples using the re-parameterization trick and natural parameters"""
         loc, scale = self.natural_to_standard()
-        # if torch.any(torch.isnan(torch.sqrt(scale))):
-        #     raise ValueError
-
-        # n = scale.shape[1]
-        #
-        # # get random part
-        # eps = torch.randn((num_samples, n), device=self.device)
-        #
-        # # de-diagonalize scale
-        # scale = torch.matmul(scale, torch.ones(n, device=self.device))
-        # samples = loc + scale * eps
-        #
-        # return samples
-        return MultivariateNormal(loc, scale.squeeze()).rsample()
+        return MultivariateNormal(loc, scale.squeeze()).rsample([n_samples])

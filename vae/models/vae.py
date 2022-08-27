@@ -25,8 +25,8 @@ def init_weights(l):
 
     """
     if isinstance(l, nn.Linear):
-        nn.init.normal_(l.weight, mean=0.0, std=1e-2)
-        nn.init.normal_(l.bias, mean=0.0, std=1e-2)
+        nn.init.normal_(l.weight, mean=0.0, std=1e-3)
+        nn.init.normal_(l.bias, mean=0.0, std=1e-3)
 
 
 def rand_partial_isometry(m, n):
@@ -104,11 +104,11 @@ class VAE(nn.Module):
         mu_x, log_var_x = self.decode(z)
         return mu_x, log_var_x, mu_z, log_var_z
 
-    def loss_function(self, x, mu_x, log_var_x):
+    def loss_function(self, x, mu_x, log_var_x, full=False, reduction="mean"):
         if self.recon_loss == "MSE":
             recon_loss = F.mse_loss(mu_x, x)
         elif self.recon_loss == "likelihood":
-            recon_loss = F.gaussian_nll_loss(mu_x, x, log_var_x.exp(), full=True)
+            recon_loss = F.gaussian_nll_loss(mu_x, x, log_var_x.exp(), full=full, reduction=reduction)
         return recon_loss
 
     def save_and_log(self, obs, epoch, save_path):

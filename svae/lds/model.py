@@ -13,8 +13,9 @@ from vae import VAE
 
 from distributions import MatrixNormalInverseWishart
 
-np.set_printoptions(edgeitems=30, linewidth=100000,
-                    formatter=dict(float=lambda x: "%.3g" % x))
+np.set_printoptions(
+    edgeitems=30, linewidth=100000, formatter=dict(float=lambda x: "%.3g" % x)
+)
 
 
 class SVAE:
@@ -99,33 +100,17 @@ class SVAE:
             n_samples: int
                 Number of samples.
             """
-            decoded_means = []
-            decoded_vars = []
-            latent_samples = []
-            latent_means = []
-            latent_vars = []
-            for i in range(n_samples):
-                # samples
-                sample, _, _, (mean, variance) = local_optimization(
-                    potentials, eta_theta
-                )
-                sample = sample.squeeze()
-                # reconstruction
-                mu_y, log_var_y = self.decode(sample)
-                # save
-                decoded_means.append(mu_y)
-                decoded_vars.append(log_var_y)
-                latent_samples.append(sample)
-                latent_means.append(mean)
-                latent_vars.append(torch.diagonal(variance, dim1=-2, dim2=-1))
+            x, _, _ = local_optimization(potentials, eta_theta, n_samples)
+            mu_y, log_var_y = self.decode(x.reshape(-1, x.shape[-1]))
 
-            decoded_means = torch.stack(decoded_means)
-            decoded_vars = torch.stack(decoded_vars)
-            latent_samples = torch.stack(latent_samples)
-            latent_means = torch.stack(latent_means)
-            latent_vars = torch.stack(latent_vars)
+            mu_y = mu_y.reshape(*x.shape[:-1], -1)
+            mu_y = torch.swapaxes(mu_y, axis0=0, axis1=1)
 
-            return decoded_means, decoded_vars, latent_samples, latent_means, latent_vars
+            log_var_y = log_var_y.reshape(*x.shape[:-1], -1)
+            log_var_y = torch.swapaxes(log_var_y, axis0=0, axis1=1)
+
+            x = torch.swapaxes(x, axis0=0, axis1=1)
+            return mu_y, log_var_y, x
 
         with torch.no_grad():
             self.eta_theta = eta_theta
@@ -140,8 +125,8 @@ class SVAE:
             potentials = zero_out(prefix, potentials)
 
             # get samples
-            n_samples = 1
-            decoded_means, decoded_vars, latent_samples, latent_means, latent_vars = get_samples(n_samples)
+            n_samples = 5
+            decoded_means, decoded_vars, latent_samples = get_samples(n_samples)
             # plot(
             #     obs=data.cpu().detach().numpy(),
             #     samples=samples.cpu().detach().numpy(),
@@ -160,13 +145,13 @@ class SVAE:
                 save_path=self.save_path,
             )
 
-            plot_observations(
-                obs=latent_means.mean(0).cpu().detach().numpy(),
-                samples=latent_samples.mean(0).cpu().detach().numpy(),
-                variance=latent_vars.mean(0).cpu().detach().numpy(),
-                title=f"latents@epoch:{epoch}",
-                save_path=self.save_path,
-            )
+            # plot_observations(
+            #     obs=latent_means.mean(0).cpu().detach().numpy(),
+            #     samples=latent_samples.mean(0).cpu().detach().numpy(),
+            #     variance=latent_vars.mean(0).cpu().detach().numpy(),
+            #     title=f"latents@epoch:{epoch}",
+            #     save_path=self.save_path,
+            # )
 
     def fit(self, obs, epochs, batch_size, latent_dim, kld_weight):
         """
@@ -226,7 +211,6 @@ class SVAE:
         train_loss = []
         for epoch in range(epochs + 1):
 
-
             total_loss = []
             for i, y in enumerate(dataloader):
                 potentials = self.encode(y)
@@ -241,8 +225,8 @@ class SVAE:
                 """
                 Find local optimum for local variational parameters eta_x, eta_z
                 """
-                (x, (E_init_stats, E_pair_stats), local_kld, _,) = local_optimization(
-                    potentials, (niw_param, mniw_param)
+                x, (E_init_stats, E_pair_stats), local_kld = local_optimization(
+                    potentials, (niw_param, mniw_param), n_samples=2
                 )
 
                 # regularization
@@ -259,12 +243,12 @@ class SVAE:
                     niw_param,
                     niw_prior,
                     len(data),
-                    num_batches,
+                    1,
                 )
                 niw_param = niw_optimizer.update(niw_param, torch.stack(nat_grad_init))
 
                 nat_grad_pair = natural_gradient(
-                    E_pair_stats, mniw_param, mniw_prior, len(data), num_batches
+                    E_pair_stats, mniw_param, mniw_prior, len(data), 1
                 )
                 mniw_param = [
                     mniw_optimizer[i].update(mniw_param[i], nat_grad_pair[i])
@@ -275,16 +259,26 @@ class SVAE:
                 Update encoder/decoder parameters using automatic differentiation
                 """
                 # reconstruction loss
-                mu_y, log_var_y = self.decode(x)
-                recon_loss = num_batches * self.vae.loss_function(
-                    y, mu_y.squeeze(), log_var_y.squeeze()
+                mu_y, log_var_y = self.decode(x.reshape(-1, x.shape[-1]))
+                recon_loss = (
+                    self.vae.loss_function(
+                        y[:, None, :],
+                        mu_y.reshape(*x.shape[:-1], -1),
+                        log_var_y.reshape(*x.shape[:-1], -1),
+                        full=True,
+                        reduction="sum",
+                    )
+                    / x.shape[1]
                 )
 
-                local_kld = (num_batches * local_kld) / len(y)
-                kld_loss = (global_kld + local_kld)
+                recon_loss = (num_batches * recon_loss) / len(data)
+                local_kld = (num_batches * local_kld) / len(data)
+
+                kld_loss = global_kld + local_kld
 
                 loss = recon_loss + kld_weight * kld_loss
-                # loss = global_kld
+                # print(f"{global_kld:.3f} \t {local_kld.item():.3f} \t {recon_loss:.3f}")
+                # print(loss.item())
 
                 optimizer.zero_grad()
                 # compute gradients
