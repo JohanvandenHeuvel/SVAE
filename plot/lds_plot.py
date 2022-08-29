@@ -32,7 +32,7 @@ def plot_observations(obs, samples, variance, title="plot", save_path=None):
         fig.savefig(os.path.join(save_path, title))
         plt.close(fig)
     else:
-        plt.plot()
+        plt.show()
 
 
 def plot_video_observations(ax, obs, prefix):
@@ -117,4 +117,4 @@ def plot(
         fig.savefig(os.path.join(save_path, title))
         plt.close(fig)
     else:
-        plt.plot()
+        plt.show()
