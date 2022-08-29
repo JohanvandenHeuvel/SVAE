@@ -5,7 +5,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from matrix_ops import pack_dense, unpack_dense
-from plot.lds_plot import plot_observations, plot
+from plot.lds_plot import plot_observations, plot, plot_latents
 from svae.gradient import natural_gradient, SGDOptim
 from svae.lds.global_optimization import initialize_global_lds_parameters, prior_kld_lds
 from svae.lds.local_optimization import local_optimization
@@ -14,7 +14,7 @@ from vae import VAE
 from distributions import MatrixNormalInverseWishart
 
 np.set_printoptions(
-    edgeitems=30, linewidth=100000, formatter=dict(float=lambda x: "%.3g" % x)
+    edgeitems=30, linewidth=100000, formatter=dict(float=lambda x: "%.3g" % x), precision=2
 )
 
 
@@ -117,31 +117,33 @@ class SVAE:
             self.save_model(epoch)
 
             # only use a subset of the data for plotting
-            data = data[:100]
+            data = data[:200]
 
             # set the observations to zero after prefix
-            prefix = 25
+            prefix = 100
             potentials = self.encode(data)
             potentials = zero_out(prefix, potentials)
 
             # get samples
-            n_samples = 5
+            n_samples = 50
             decoded_means, decoded_vars, latent_samples = get_samples(n_samples)
 
             plot(
                 obs=data.cpu().detach().numpy(),
                 samples=decoded_means.mean(0).cpu().detach().numpy(),
                 title=f"epoch:{epoch}",
-                save_path=self.save_path,
+                # save_path=self.save_path,
             )
 
-            plot_observations(
-                obs=decoded_means.mean(0).cpu().detach().numpy(),
-                samples=data.cpu().detach().numpy(),
-                variance=decoded_vars.mean(0).cpu().detach().numpy(),
-                title=f"obs@epoch:{epoch}",
-                save_path=self.save_path,
-            )
+            plot_latents(latents=latent_samples.mean(0).T.cpu().detach().numpy())
+
+            # plot_observations(
+            #     obs=decoded_means.mean(0).cpu().detach().numpy(),
+            #     samples=data.cpu().detach().numpy(),
+            #     variance=decoded_vars.mean(0).cpu().detach().numpy(),
+            #     title=f"obs@epoch:{epoch}",
+            #     save_path=self.save_path,
+            # )
 
             # plot_observations(
             #     obs=latent_means.mean(0).cpu().detach().numpy(),
@@ -211,6 +213,8 @@ class SVAE:
 
             total_loss = []
             for i, y in enumerate(dataloader):
+
+                print(f">> ITER {i} EPCOCH {epoch} =====")
                 potentials = self.encode(y)
 
                 # remove dependency on previous iterations
@@ -224,7 +228,7 @@ class SVAE:
                 Find local optimum for local variational parameters eta_x, eta_z
                 """
                 x, (E_init_stats, E_pair_stats), local_kld = local_optimization(
-                    potentials, (niw_param, mniw_param), n_samples=2
+                    potentials, (niw_param, mniw_param), n_samples=10
                 )
 
                 # regularization
@@ -241,17 +245,26 @@ class SVAE:
                     niw_param,
                     niw_prior,
                     len(data),
-                    1,
+                    num_batches,
                 )
                 niw_param = niw_optimizer.update(niw_param, torch.stack(nat_grad_init))
 
                 nat_grad_pair = natural_gradient(
-                    E_pair_stats, mniw_param, mniw_prior, len(data), 1
+                    E_pair_stats, mniw_param, mniw_prior, len(data), num_batches
                 )
                 mniw_param = [
                     mniw_optimizer[i].update(mniw_param[i], nat_grad_pair[i])
                     for i in range(len(nat_grad_pair))
                 ]
+
+                # print(f"\n ======== ITER {i} ======== \n")
+                # print(nat_grad_pair[0].cpu().detach().numpy())
+                # print()
+                # print(nat_grad_pair[1].cpu().detach().numpy())
+                # print()
+                # print(nat_grad_pair[2].cpu().detach().numpy())
+                # print()
+                # print(nat_grad_pair[3])
 
                 """
                 Update encoder/decoder parameters using automatic differentiation
@@ -275,7 +288,7 @@ class SVAE:
                 kld_loss = global_kld + local_kld
 
                 loss = recon_loss + kld_weight * kld_loss
-                # print(f"{global_kld:.3f} \t {local_kld.item():.3f} \t {recon_loss:.3f}")
+                print(f"{global_kld:.3f} \t {local_kld.item():.3f} \t {recon_loss:.3f}")
                 # print(loss.item())
 
                 optimizer.zero_grad()
@@ -294,7 +307,9 @@ class SVAE:
 
             train_loss.append(np.mean(total_loss, axis=0))
 
-            if epoch % max((epochs // 20), 1) == 0:
+            # break
+
+            if epoch % max((epochs // 20), 1) == 0 or True:
                 print(
                     f"[{epoch}/{epochs + 1}] -- (recon:{train_loss[-1][0]}) (local kld:{train_loss[-1][1]}) (global kld: {train_loss[-1][2]})"
                 )

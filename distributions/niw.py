@@ -87,15 +87,25 @@ class NormalInverseWishart(ExpDistribution):
         return pack_dense(stats[0], stats[1].squeeze(), stats[2].squeeze(), stats[3])
 
     def logZ(self):
-        kappa, mu_0, Phi, nu = self.natural_to_standard()
-        p = mu_0.shape[-1]
-        value = (
-            p * nu / 2 * torch.log(torch.tensor([2], device=self.device))
-            + torch.special.multigammaln(nu / 2, p)
-            - nu / 2 * torch.slogdet(Phi)[1]
-            - p / 2 * torch.log(kappa)
+        # kappa, mu_0, Phi, nu = self.natural_to_standard()
+        # p = mu_0.shape[-1]
+        # value = (
+        #     p * nu / 2 * torch.log(torch.tensor([2], device=self.device))
+        #     + torch.special.multigammaln(nu / 2, p)
+        #     - nu / 2 * torch.slogdet(Phi)[1]
+        #     - p / 2 * torch.log(kappa)
+        # )
+        # return torch.sum(value)
+        A, b, c, d = unpack_dense(self.nat_param)
+        mniw = MatrixNormalInverseWishart(
+            [
+                A.squeeze(),
+                b.squeeze().unsqueeze(-1),
+                torch.tensor([[c]], device=self.device),
+                d,
+            ]
         )
-        return torch.sum(value)
+        return mniw.logZ()
 
     def natural_to_standard(self):
         eta_2, eta_3, eta_4, eta_1 = unpack_dense(self.nat_param)

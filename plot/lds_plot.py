@@ -52,7 +52,7 @@ def plot_video_observations(ax, obs, prefix):
     ax.axis("off")
 
 
-def plot_latents(ax, latents, mean, variance):
+def plot_latents(latents):
     """Plot the latent states.
 
     Parameters
@@ -66,14 +66,17 @@ def plot_latents(ax, latents, mean, variance):
     variance:
         Variance of latent states.
     """
-    colors = cm.rainbow(np.linspace(0, 1, len(latents)))
-    x = np.linspace(0, 100, 100)
-    for j in range(len(latents)):
-        ax.plot(latents[j], "--", c=colors[j], alpha=0.8)
-        ax.plot(mean[j], c=colors[j], alpha=0.8)
-        ax.fill_between(
-            x, mean[j] - variance[j], mean[j] + variance[j], color=colors[j], alpha=0.1
-        )
+    N = len(latents)
+    # colors = cm.rainbow(np.linspace(0, 1, len(latents)))
+    # x = np.linspace(0, 100, 100)
+    fig, axs = plt.subplots(N, 1, figsize=(10, N*4))
+    for j in range(N):
+        axs[j].plot(latents[j])
+        # ax.plot(mean[j], c=colors[j], alpha=0.8)
+        # ax.fill_between(
+        #     x, mean[j] - variance[j], mean[j] + variance[j], color=colors[j], alpha=0.1
+        # )
+    plt.show()
 
 
 def plot(

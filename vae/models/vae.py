@@ -25,8 +25,8 @@ def init_weights(l):
 
     """
     if isinstance(l, nn.Linear):
-        nn.init.normal_(l.weight, mean=0.0, std=1e-3)
-        nn.init.normal_(l.bias, mean=0.0, std=1e-3)
+        nn.init.normal_(l.weight, mean=0.0, std=1e-2)
+        nn.init.normal_(l.bias, mean=0.0, std=1e-2)
 
 
 def rand_partial_isometry(m, n):
@@ -64,7 +64,7 @@ class VAE(nn.Module):
         # hidden layers
         for i in range(len(encoder_layers) - 1):
             encoder_modules.append(nn.Linear(encoder_layers[i], encoder_layers[i + 1]))
-            encoder_modules.append(nn.ReLU())
+            encoder_modules.append(nn.Tanh())
         encoder = nn.Sequential(*encoder_modules)
         # output layer
         self.mu_enc = nn.Sequential(encoder, nn.Linear(encoder_layers[-1], latent_dim))
@@ -81,7 +81,7 @@ class VAE(nn.Module):
         # hidden layers
         for i in range(len(decoder_layers) - 1):
             decoder_modules.append(nn.Linear(decoder_layers[i], decoder_layers[i + 1]))
-            decoder_modules.append(nn.ReLU())
+            decoder_modules.append(nn.Tanh())
         decoder = nn.Sequential(*decoder_modules)
         # output layer
         self.mu_dec = nn.Sequential(decoder, nn.Linear(decoder_layers[-1], input_size))

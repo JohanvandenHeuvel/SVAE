@@ -52,9 +52,13 @@ def exponential_kld(dist_1: ExpDistribution, dist_2: ExpDistribution) -> float:
     eta_1 = dist_1.nat_param
     eta_2 = dist_2.nat_param
     if isinstance(eta_1, List):
+        # for i in range(4):
+        #     print((eta_1[i] - eta_2[i]).cpu().detach().numpy())
         value = [torch.flatten(eta_1[i] - eta_2[i]).float() @ torch.flatten(expected_stats[i].float()) for i in range(len(eta_1))]
         value = torch.sum(torch.stack(value))
-        value = value - dist_1.logZ() + dist_2.logZ()
+        value = value - (dist_1.logZ() - dist_2.logZ())
+        # print(f"KLD: {value:.3f} {dist_1.logZ():.3f}")
+        value = value
     else:
         value = (
             torch.flatten((eta_1 - eta_2))

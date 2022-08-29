@@ -1,7 +1,7 @@
 import torch
 
 from distributions import MatrixNormalInverseWishart, NormalInverseWishart
-from matrix_ops import pack_dense, outer_product, is_posdef, unpack_dense
+from matrix_ops import pack_dense, outer_product, is_posdef, unpack_dense, symmetrize
 from distributions.gaussian import (
     info_to_standard,
     Gaussian,
@@ -24,7 +24,6 @@ def info_condition(J, h, J_obs, h_obs):
 
 def condition(J, h, y, Jxx, Jxy):
     J_cond = J + Jxx
-    # TODO +?
     h_cond = h - (Jxy @ y.T).T
     return J_cond, h_cond
 
@@ -32,40 +31,43 @@ def condition(J, h, y, Jxx, Jxy):
 def lognorm(J, h, full=False):
     n = len(h)
     constant = n * torch.log(torch.tensor(2 * torch.pi)) if full else 0.0
-    return 0.5 * (h @ torch.linalg.solve(J, h) + torch.slogdet(J)[1] + constant)
+    return 0.5 * (h @ torch.linalg.solve(J, h) - torch.slogdet(J)[1] + constant)
 
 
 def info_marginalize(J11, J12, J22, h, logZ):
-    # # assert logZ < 0
-    # # J11_inv = torch.inverse(J11)
-    # # temp = J12.T @ J11_inv
-    # temp = torch.linalg.solve(J11, J12)
-    #
-    # # J_pred = J22 - J12.T @ inv(J11) @ J12
+    # assert logZ < 0
+    # J11_inv = torch.inverse(J11)
+    # temp = J12.T @ J11_inv
+    temp = torch.linalg.solve(J11, J12)
+
+    # J_pred = J22 - J12.T @ inv(J11) @ J12
     # J_pred = symmetrize(J22 - temp @ J12)
-    # # h_pred = h2 - J12.T @ inv(J11) @ h1
+    J_pred = symmetrize(J22 - J12.T @ torch.linalg.solve(J11, J12))
+    # h_pred = h2 - J12.T @ inv(J11) @ h1
     # h_pred = -temp @ h
+    h_pred = -J12.T @ torch.linalg.solve(symmetrize(J11), h)
     # logZ_pred = logZ - 1/2 h1.T @ inv(J11) @ h1 + 1/2 log|J11| - n/2 log(2pi)
     # logZ_pred = logZ - lognorm(J11, h)
+    logZ_pred = 0.5 * h @ torch.linalg.solve(J11, h) - 0.5 * torch.linalg.slogdet(J11)[1]
 
     ###################
     #     CHOL        #
     ###################
-    n = len(J11)
-
-    L = torch.linalg.cholesky(J11)
-    v = torch.linalg.solve_triangular(L, h[..., None], upper=False)
-
-    # A = J12.T @ torch.linalg.inv(J11)
-    # print(torch.max(torch.linalg.svdvals(A)))
-
-    h_pred = -J12.T @ torch.linalg.solve_triangular(L.T, v, upper=False)
-    temp = torch.linalg.solve_triangular(L, J12, upper=False)
-    J_pred = J22 - temp.T @ temp
-
-    logZ_pred = 0.5 * v.T @ v - torch.sum(torch.log(torch.diag(L)))
-
-    assert torch.all(torch.linalg.eigvalsh(J_pred) >= 0.0)
+    # n = len(J11)
+    #
+    # L = torch.linalg.cholesky(J11)
+    # v = torch.linalg.solve_triangular(L, h[..., None], upper=False)
+    #
+    # # A = J12.T @ torch.linalg.inv(J11)
+    # # print(torch.max(torch.linalg.svdvals(A)))
+    #
+    # h_pred = -J12.T @ torch.linalg.solve_triangular(L.T, v, upper=False)
+    # temp = torch.linalg.solve_triangular(L, J12, upper=False)
+    # J_pred = J22 - temp.T @ temp
+    #
+    # logZ_pred = 0.5 * v.T @ v - torch.sum(torch.log(torch.diag(L)))
+    #
+    # assert torch.all(torch.linalg.eigvalsh(J_pred) >= 0.0)
 
     return J_pred, h_pred.squeeze(), logZ_pred.squeeze() + logZ
 
@@ -76,24 +78,18 @@ def info_predict(J, h, J11, J12, J22, logZ):
 
 
 def info_kalman_filter(init_params, pair_params, observations):
-    J, h = init_params
+    (J, h), logZ = init_params
     J11, J12, J22, logZ_param = pair_params
 
-    # TODO logZ in init_params
-    # total_logZ = init_params[2]
-    total_logZ = 0
+    total_logZ = logZ
     forward_messages = []
     for i, (J_obs, h_obs) in enumerate(observations):
-        # print(
-        #     f"J:{torch.norm(J)}, h:{torch.norm(h)}, J_obs:{torch.norm(J_obs)}, h_obs:{torch.norm(h_obs)}"
-        # )
         J_cond, h_cond = info_condition(J, h, J_obs, h_obs)
         J, h, logZ = info_predict(J_cond, h_cond, J11, J12, J22, logZ_param)
-        total_logZ += logZ
+        total_logZ += logZ.squeeze()
         forward_messages.append(((J_cond, h_cond), (J, h)))
 
-    # TODO logZ of last message?
-    # logZ += lognorm(J, h)
+    total_logZ += lognorm(J, h)
 
     return forward_messages, total_logZ
 
@@ -103,15 +99,28 @@ def info_rst_smoothing(J, h, cond_msg, pred_msg, pair_params, loc_next):
     J_pred, h_pred = pred_msg
     J11, J12, J22 = pair_params
 
-    temp = J12 @ torch.inverse(J - J_pred + J22)
-    J_smooth = J_cond + J11 - temp @ J12.T
-    h_smooth = h_cond - temp @ (h - h_pred)
+    # temp = J12 @ torch.inverse(J - J_pred + J22)
+    # J_smooth = J_cond + J11 - temp @ J12.T
+    # h_smooth = h_cond - temp @ (h - h_pred)
+    #
+    # loc, scale = info_to_standard(J_smooth, h_smooth)
+    # E_xnxT = -temp @ scale + outer_product(loc_next, loc)
+    # E_xxT = scale + outer_product(loc, loc)
+
+    L = torch.linalg.cholesky(J - J_pred + J22)
+    temp = torch.linalg.solve_triangular(L, J12.T, upper=False)
+    J_smooth = (J_cond + J11) - temp.T @ temp
+    h_smooth = h_cond - temp.T @ torch.linalg.solve_triangular(
+        L, (h - h_pred)[..., None], upper=False
+    ).squeeze()
 
     loc, scale = info_to_standard(J_smooth, h_smooth)
-    E_xnxT = temp @ scale + outer_product(loc_next, loc)
+    E_xnxT = -torch.linalg.solve_triangular(
+        L.T, torch.linalg.solve_triangular(L, J12.T @ scale, upper=False), upper=False
+    ) + outer_product(loc_next, loc)
     E_xxT = scale + outer_product(loc, loc)
 
-    stats = (loc, E_xxT, -E_xnxT)
+    stats = (loc, E_xxT, E_xnxT)
 
     return J_smooth, h_smooth, stats
 
@@ -179,13 +188,14 @@ def info_sample_backward(forward_messages, pair_params, n_samples):
 
     samples = [next_sample]
     for (J_cond, h_cond), _ in reversed(forward_messages[:-1]):
-        J = J_cond + J11
-        h = h_cond - next_sample @ J12.T
+        J, h = condition(J_cond, h_cond, next_sample, J11, J12)
         # Sample from multiple Gaussians using as mean [h_0, ..., h_i, ...]
         # and block matrix with J on the diagonal as variance.
         _J = torch.kron(torch.eye(len(h), device=J.device), J.contiguous())
         _h = h.flatten()
-        next_sample = Gaussian(info_to_natural(_J, _h)).rsample().reshape(len(h), len(J))
+        next_sample = (
+            Gaussian(info_to_natural(_J, _h)).rsample().reshape(len(h), len(J))
+        )
         samples.append(next_sample)
     samples = torch.stack(list(reversed(samples)))
     return samples
@@ -245,8 +255,8 @@ def local_optimization(potentials, eta_theta, n_samples=1):
     """
     optimize local parameters
     """
-    init_param = natural_to_info(NormalInverseWishart(niw_param).expected_stats())
-    init_param = tuple([p.squeeze() for p in init_param])
+    local_natparam = NormalInverseWishart(niw_param).expected_stats()
+    init_param = natural_to_info(local_natparam), torch.sum(local_natparam[2:])
 
     forward_messages, logZ = info_kalman_filter(
         init_params=init_param, pair_params=(J11, J12, J22, logZ), observations=y
@@ -266,5 +276,9 @@ def local_optimization(potentials, eta_theta, n_samples=1):
         )
         - logZ
     )
+
+    # print(logZ.item(), torch.tensordot(
+    #     potentials, pack_dense(E_node_stats[0], E_node_stats[1]), dims=3
+    # ).item())
 
     return samples, (E_init_stats, E_pair_stats), local_kld

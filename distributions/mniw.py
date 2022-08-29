@@ -22,10 +22,9 @@ class MatrixNormalInverseWishart(ExpDistribution):
     def expected_stats(self):
         K, M, Phi, nu = self.natural_to_standard()
 
-        fudge = 1e-3
+        fudge = 1e-8
 
         n, _ = M.shape
-        p, _ = Phi.shape
         # E_T2 = -nu / 2 * symmetrize(torch.inverse(Phi)) + fudge * torch.eye(
         #     p, device=self.device
         # )
@@ -41,14 +40,13 @@ class MatrixNormalInverseWishart(ExpDistribution):
         #     - multidigamma(nu / 2, n)
         # )
 
-        E_T2 = nu * torch.linalg.inv(
-            symmetrize(Phi) + fudge * torch.eye(p, device=self.device)
-        )
+        E_T2 = nu * symmetrize(torch.linalg.inv(
+            Phi)) + fudge * torch.eye(Phi.shape[0], device=self.device)
         E_T3 = nu * torch.linalg.solve(Phi, M)
         E_T4 = (
             n * K
             + nu * symmetrize(torch.matmul(M.T, torch.linalg.solve(Phi, M)))
-            + fudge * torch.eye(n, device=self.device)
+            + fudge * torch.eye(K.shape[0], device=self.device)
         )
         E_T1 = (
             -torch.slogdet(Phi)[1]
@@ -64,10 +62,8 @@ class MatrixNormalInverseWishart(ExpDistribution):
 
     def expected_standard_params(self):
         J11, J12, J22, _ = self.expected_stats()
-        J22 = -2 * J22
-        J12 = -1 * J12.T
-        A = -torch.linalg.solve(J22, J12).T
-        Q = torch.linalg.inv(J22)
+        A = torch.linalg.solve(-2 * J22, J12.T)
+        Q = torch.linalg.inv(-2 * J22)
         return A, Q
 
     def logZ(self):
