@@ -57,6 +57,13 @@ def standard_to_natural(loc, scale):
     return pack_dense(eta_2, eta_1)
 
 
+def standard_to_info(loc, scale):
+    J = torch.inverse(scale)
+    # h = torch.solve(scale, loc)
+    h = J @ loc
+    return J, h
+
+
 class Gaussian(ExpDistribution):
     def __init__(self, nat_param: torch.Tensor):
         super().__init__(nat_param)
@@ -123,12 +130,6 @@ class Gaussian(ExpDistribution):
         loc = torch.bmm(scale, eta_1[..., None]).squeeze()
 
         return loc, scale
-
-    def standard_to_info(self, loc, scale):
-        J = torch.inverse(scale)
-        # h = torch.solve(scale, loc)
-        h = J @ loc
-        return J, h
 
     def rsample(self, n_samples=1):
         """get samples using the re-parameterization trick and natural parameters"""

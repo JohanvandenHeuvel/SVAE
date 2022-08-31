@@ -40,8 +40,9 @@ class MatrixNormalInverseWishart(ExpDistribution):
         #     - multidigamma(nu / 2, n)
         # )
 
-        E_T2 = nu * symmetrize(torch.linalg.inv(
-            Phi)) + fudge * torch.eye(Phi.shape[0], device=self.device)
+        E_T2 = nu * symmetrize(torch.linalg.inv(Phi)) + fudge * torch.eye(
+            Phi.shape[0], device=self.device
+        )
         E_T3 = nu * torch.linalg.solve(Phi, M)
         E_T4 = (
             n * K
@@ -59,12 +60,6 @@ class MatrixNormalInverseWishart(ExpDistribution):
 
         # return -0.5 * E_T2, E_T3.T, -0.5 * E_T4, 0.5 * E_T1
         return -0.5 * E_T4, E_T3.T, -0.5 * E_T2, 0.5 * E_T1
-
-    def expected_standard_params(self):
-        J11, J12, J22, _ = self.expected_stats()
-        A = torch.linalg.solve(-2 * J22, J12.T)
-        Q = torch.linalg.inv(-2 * J22)
-        return A, Q
 
     def logZ(self):
         K, M, Phi, nu = self.natural_to_standard()

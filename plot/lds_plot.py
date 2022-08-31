@@ -2,7 +2,6 @@ import os
 
 import matplotlib.pyplot as plt
 import numpy as np
-import torch
 
 
 def plot_observations(obs, samples, variance, title="plot", save_path=None):
@@ -64,9 +63,15 @@ def plot_latents(latents, prefix, title=None, save_path=None):
     fig, axs = plt.subplots(N, 1, figsize=(10, N * 4))
     for j in range(N):
         axs[j].plot(latents[j])
-        axs[j].plot([prefix - 0.5, prefix - 0.5], [latents[j].min(), latents[j].max()], "--", "r", linewidth=2)
+        axs[j].plot(
+            [prefix - 0.5, prefix - 0.5],
+            [latents[j].min(), latents[j].max()],
+            "--",
+            linewidth=2,
+        )
 
-
+    fig.suptitle(title)
+    fig.tight_layout()
     # save the figure to disk or show it
     if save_path is not None:
         if title is None:
@@ -78,7 +83,7 @@ def plot_latents(latents, prefix, title=None, save_path=None):
 
 
 def plot(
-    obs, samples, prefix=25, title=None, save_path=None,
+        obs, samples, prefix=25, title=None, save_path=None,
 ):
     """
 
@@ -88,12 +93,6 @@ def plot(
         observations
     samples:
         reconstructed observations
-    latent_samples:
-        sampled latent states
-    latent_means:
-        mean for latent states
-    latent_vars:
-        variance for latent states
     prefix:
         after which time to zero-out the data
     title: String
@@ -106,6 +105,41 @@ def plot(
     sample_images = np.hstack(samples[:5])
     big_image = np.hstack((obs, mean_image, sample_images))
     plot_video_observations(axs, big_image.T, prefix)
+
+    fig.suptitle(title)
+    fig.tight_layout()
+    # save the figure to disk or show it
+    if save_path is not None:
+        if title is None:
+            raise ValueError(f"saving requires title but title is {title}")
+        fig.savefig(os.path.join(save_path, title))
+        plt.close(fig)
+    else:
+        plt.show()
+
+
+def plot_parameters(A, Q, Sigma, mu, title=None, save_path=None):
+    fig, axs = plt.subplots(2, 2)
+
+    im_A = axs[0, 0].matshow(A.cpu().detach().numpy())
+    im_Q = axs[0, 1].matshow(Q.cpu().detach().numpy())
+    im_Sigma = axs[1, 0].matshow(Sigma.cpu().detach().numpy())
+    im_mu = axs[1, 1].matshow(mu[..., None].cpu().detach().numpy())
+
+    fig.colorbar(im_A, ax=axs[0, 0])
+    fig.colorbar(im_Q, ax=axs[0, 1])
+    fig.colorbar(im_Sigma, ax=axs[1, 0])
+    fig.colorbar(im_mu, ax=axs[1, 1])
+
+    axs[0, 0].axis("off")
+    axs[1, 0].axis("off")
+    axs[0, 1].axis("off")
+    axs[1, 1].axis("off")
+
+    axs[0, 0].title.set_text("A")
+    axs[1, 0].title.set_text("Q")
+    axs[0, 1].title.set_text("Sigma")
+    axs[1, 1].title.set_text("mu")
 
     fig.suptitle(title)
     fig.tight_layout()

@@ -4,17 +4,21 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 
+from distributions.gaussian import natural_to_info
 from matrix_ops import pack_dense, unpack_dense
-from plot.lds_plot import plot_observations, plot, plot_latents
+from plot.lds_plot import plot_observations, plot, plot_latents, plot_parameters
 from svae.gradient import natural_gradient, SGDOptim
 from svae.lds.global_optimization import initialize_global_lds_parameters, prior_kld_lds
-from svae.lds.local_optimization import local_optimization
+from svae.lds.local_optimization import local_optimization, standard_pair_params
 from vae import VAE
 
-from distributions import MatrixNormalInverseWishart
+from distributions import MatrixNormalInverseWishart, NormalInverseWishart, Gaussian
 
 np.set_printoptions(
-    edgeitems=30, linewidth=100000, formatter=dict(float=lambda x: "%.3g" % x), precision=2
+    edgeitems=30,
+    linewidth=100000,
+    formatter=dict(float=lambda x: "%.3g" % x),
+    precision=2,
 )
 
 
@@ -114,7 +118,14 @@ class SVAE:
 
         with torch.no_grad():
             self.eta_theta = eta_theta
+            niw_param, mniw_param = eta_theta
             self.save_model(epoch)
+
+            J11, J12, J22, _ = MatrixNormalInverseWishart(mniw_param).expected_stats()
+            A, Q = standard_pair_params(-2 * J11, -1 * J12, -2 * J22)
+            Sigma, mu, _, _ = unpack_dense(
+                NormalInverseWishart(niw_param).expected_stats()
+            )
 
             # only use a subset of the data for plotting
             data = data[:200]
@@ -128,31 +139,24 @@ class SVAE:
             n_samples = 50
             decoded_means, decoded_vars, latent_samples = get_samples(n_samples)
 
+            plot_parameters(
+                A, Q, Sigma, mu, title=f"{epoch}_params", save_path=self.save_path
+            )
+
             plot(
                 obs=data.cpu().detach().numpy(),
                 samples=decoded_means.cpu().detach().numpy(),
                 prefix=prefix,
-                title=f"obs@epoch:{epoch}",
+                title=f"{epoch}_obs",
                 save_path=self.save_path,
             )
 
-            plot_latents(latents=latent_samples.mean(0).T.cpu().detach().numpy(), prefix=prefix, title=f"latent@epoch:{epoch}", save_path=self.save_path)
-
-            # plot_observations(
-            #     obs=decoded_means.mean(0).cpu().detach().numpy(),
-            #     samples=data.cpu().detach().numpy(),
-            #     variance=decoded_vars.mean(0).cpu().detach().numpy(),
-            #     title=f"obs@epoch:{epoch}",
-            #     save_path=self.save_path,
-            # )
-
-            # plot_observations(
-            #     obs=latent_means.mean(0).cpu().detach().numpy(),
-            #     samples=latent_samples.mean(0).cpu().detach().numpy(),
-            #     variance=latent_vars.mean(0).cpu().detach().numpy(),
-            #     title=f"latents@epoch:{epoch}",
-            #     save_path=self.save_path,
-            # )
+            plot_latents(
+                latents=latent_samples.mean(0).T.cpu().detach().numpy(),
+                prefix=prefix,
+                title=f"{epoch}_latents",
+                save_path=self.save_path,
+            )
 
     def fit(self, obs, epochs, batch_size, latent_dim, kld_weight):
         """
@@ -293,7 +297,6 @@ class SVAE:
 
                 loss = recon_loss + kld_weight * kld_loss
                 print(f"{global_kld:.3f} \t {local_kld.item():.3f} \t {recon_loss:.3f}")
-                # print(loss.item())
 
                 optimizer.zero_grad()
                 # compute gradients
@@ -311,14 +314,10 @@ class SVAE:
 
             train_loss.append(np.mean(total_loss, axis=0))
 
-            # break
-
             if epoch % max((epochs // 20), 1) == 0:
                 print(
                     f"[{epoch}/{epochs + 1}] -- (recon:{train_loss[-1][0]}) (local kld:{train_loss[-1][1]}) (global kld: {train_loss[-1][2]})"
                 )
-                A, _ = MatrixNormalInverseWishart(mniw_param).expected_standard_params()
-                print(torch.linalg.eigvalsh(A))
                 self.save_and_log(data, epoch, (niw_param, mniw_param))
 
         print("Finished training of the SVAE")

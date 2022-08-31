@@ -48,7 +48,9 @@ def info_marginalize(J11, J12, J22, h, logZ):
     h_pred = -J12.T @ torch.linalg.solve(symmetrize(J11), h)
     # logZ_pred = logZ - 1/2 h1.T @ inv(J11) @ h1 + 1/2 log|J11| - n/2 log(2pi)
     # logZ_pred = logZ - lognorm(J11, h)
-    logZ_pred = 0.5 * h @ torch.linalg.solve(J11, h) - 0.5 * torch.linalg.slogdet(J11)[1]
+    logZ_pred = (
+        0.5 * h @ torch.linalg.solve(J11, h) - 0.5 * torch.linalg.slogdet(J11)[1]
+    )
 
     ###################
     #     CHOL        #
@@ -110,9 +112,13 @@ def info_rst_smoothing(J, h, cond_msg, pred_msg, pair_params, loc_next):
     L = torch.linalg.cholesky(J - J_pred + J22)
     temp = torch.linalg.solve_triangular(L, J12.T, upper=False)
     J_smooth = (J_cond + J11) - temp.T @ temp
-    h_smooth = h_cond - temp.T @ torch.linalg.solve_triangular(
-        L, (h - h_pred)[..., None], upper=False
-    ).squeeze()
+    h_smooth = (
+        h_cond
+        - temp.T
+        @ torch.linalg.solve_triangular(
+            L, (h - h_pred)[..., None], upper=False
+        ).squeeze()
+    )
 
     loc, scale = info_to_standard(J_smooth, h_smooth)
     E_xnxT = -torch.linalg.solve_triangular(
@@ -219,6 +225,12 @@ def info_pair_params(A, Q):
     J12 = -A.T @ J22
     J11 = A.T @ -J12
     return J11, J12, J22
+
+
+def standard_pair_params(J11, J12, J22):
+    Q = torch.inverse(J22)
+    A = -(J12 @ Q).T
+    return A, Q
 
 
 def sample_forward_messages(messages):
