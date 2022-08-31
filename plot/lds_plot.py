@@ -2,12 +2,12 @@ import os
 
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.pyplot import cm
+import torch
 
 
 def plot_observations(obs, samples, variance, title="plot", save_path=None):
     N = obs.shape[-1]
-    fig, axs = plt.subplots(N, 1, figsize=(10, N*4))
+    fig, axs = plt.subplots(N, 1, figsize=(10, N * 4))
 
     x = np.linspace(0, 100, 100)
     for n in range(N):
@@ -52,39 +52,33 @@ def plot_video_observations(ax, obs, prefix):
     ax.axis("off")
 
 
-def plot_latents(latents):
+def plot_latents(latents, prefix, title=None, save_path=None):
     """Plot the latent states.
 
     Parameters
     ----------
-    ax:
-        ax on which to plot.
     latents:
         Sampled latent states, from Normal(mean, variance).
-    mean:
-        Mean of latent states.
-    variance:
-        Variance of latent states.
     """
     N = len(latents)
-    # colors = cm.rainbow(np.linspace(0, 1, len(latents)))
-    # x = np.linspace(0, 100, 100)
-    fig, axs = plt.subplots(N, 1, figsize=(10, N*4))
+    fig, axs = plt.subplots(N, 1, figsize=(10, N * 4))
     for j in range(N):
         axs[j].plot(latents[j])
-        # ax.plot(mean[j], c=colors[j], alpha=0.8)
-        # ax.fill_between(
-        #     x, mean[j] - variance[j], mean[j] + variance[j], color=colors[j], alpha=0.1
-        # )
-    plt.show()
+        axs[j].plot([prefix - 0.5, prefix - 0.5], [latents[j].min(), latents[j].max()], "--", "r", linewidth=2)
+
+
+    # save the figure to disk or show it
+    if save_path is not None:
+        if title is None:
+            raise ValueError(f"saving requires title but title is {title}")
+        fig.savefig(os.path.join(save_path, title))
+        plt.close(fig)
+    else:
+        plt.show()
 
 
 def plot(
-    obs,
-    samples,
-    prefix=25,
-    title=None,
-    save_path=None,
+    obs, samples, prefix=25, title=None, save_path=None,
 ):
     """
 
@@ -107,9 +101,11 @@ def plot(
     save_path: String
         where to save the plot
     """
-    fig, axs = plt.subplots(2, 1, figsize=(20, 10))
-    plot_video_observations(axs[0], obs.T, prefix)
-    plot_video_observations(axs[1], samples.T, prefix)
+    fig, axs = plt.subplots(1, 1, figsize=(20, 10))
+    mean_image = samples.mean(0)
+    sample_images = np.hstack(samples[:5])
+    big_image = np.hstack((obs, mean_image, sample_images))
+    plot_video_observations(axs, big_image.T, prefix)
 
     fig.suptitle(title)
     fig.tight_layout()

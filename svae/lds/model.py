@@ -130,12 +130,13 @@ class SVAE:
 
             plot(
                 obs=data.cpu().detach().numpy(),
-                samples=decoded_means.mean(0).cpu().detach().numpy(),
-                title=f"epoch:{epoch}",
-                # save_path=self.save_path,
+                samples=decoded_means.cpu().detach().numpy(),
+                prefix=prefix,
+                title=f"obs@epoch:{epoch}",
+                save_path=self.save_path,
             )
 
-            plot_latents(latents=latent_samples.mean(0).T.cpu().detach().numpy())
+            plot_latents(latents=latent_samples.mean(0).T.cpu().detach().numpy(), prefix=prefix, title=f"latent@epoch:{epoch}", save_path=self.save_path)
 
             # plot_observations(
             #     obs=decoded_means.mean(0).cpu().detach().numpy(),
@@ -207,14 +208,17 @@ class SVAE:
         """
         Optimization loop 
         """
-        # self.save_and_log(data, "pre", (niw_param, mniw_param))
+        self.save_and_log(data, "pre", (niw_param, mniw_param))
         train_loss = []
         for epoch in range(epochs + 1):
 
             total_loss = []
             for i, y in enumerate(dataloader):
 
-                print(f">> ITER {i} EPCOCH {epoch} =====")
+                if i >= len(dataloader) - 1:
+                    continue
+
+                print(f">> ITER {i} EPOCH {epoch} =====")
                 potentials = self.encode(y)
 
                 # remove dependency on previous iterations
@@ -309,7 +313,7 @@ class SVAE:
 
             # break
 
-            if epoch % max((epochs // 20), 1) == 0 or True:
+            if epoch % max((epochs // 20), 1) == 0:
                 print(
                     f"[{epoch}/{epochs + 1}] -- (recon:{train_loss[-1][0]}) (local kld:{train_loss[-1][1]}) (global kld: {train_loss[-1][2]})"
                 )
