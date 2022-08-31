@@ -221,7 +221,7 @@ class SVAE:
         train_loss = []
         for epoch in range(epochs + 1):
 
-            print(f"> EPOCH {epoch} =====")
+            # print(f"> EPOCH {epoch} =====")
 
             total_loss = []
             for i, y in enumerate(dataloader):
@@ -229,7 +229,7 @@ class SVAE:
                 if i >= len(dataloader) - 1:
                     continue
 
-                print(f">> ITER {i} =====")
+                # print(f">> ITER {i} =====")
                 potentials = self.encode(y)
 
                 # remove dependency on previous iterations
@@ -303,7 +303,7 @@ class SVAE:
                 kld_loss = global_kld + local_kld
 
                 loss = recon_loss + kld_weight * kld_loss
-                print(f"{global_kld:.3f} \t {local_kld.item():.3f} \t {recon_loss:.3f}")
+                # print(f"{global_kld:.3f} \t {local_kld.item():.3f} \t {recon_loss:.3f}")
 
                 optimizer.zero_grad()
                 # compute gradients
@@ -323,7 +323,7 @@ class SVAE:
 
             if epoch % max((epochs // 20), 1) == 0:
                 print(
-                    f"[{epoch}/{epochs + 1}] -- {train_loss[-1].mean()} (recon:{train_loss[-1][0]}) (local kld:{train_loss[-1][1]}) (global kld: {train_loss[-1][2]})"
+                    f"[{epoch}/{epochs + 1}] -- {train_loss[-1].sum()} (recon:{train_loss[-1][0]}) (local kld:{train_loss[-1][1]}) (global kld: {train_loss[-1][2]})"
                 )
                 self.save_and_log(data, epoch, (niw_param, mniw_param))
 
