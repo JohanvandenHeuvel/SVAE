@@ -83,7 +83,7 @@ def plot_latents(latents, prefix, title=None, save_path=None):
 
 
 def plot(
-        obs, samples, prefix=25, title=None, save_path=None,
+    obs, samples, prefix=25, title=None, save_path=None,
 ):
     """
 
@@ -132,14 +132,49 @@ def plot_parameters(A, Q, Sigma, mu, title=None, save_path=None):
     fig.colorbar(im_mu, ax=axs[1, 1])
 
     axs[0, 0].axis("off")
-    axs[1, 0].axis("off")
     axs[0, 1].axis("off")
+    axs[1, 0].axis("off")
     axs[1, 1].axis("off")
 
     axs[0, 0].title.set_text("A")
-    axs[1, 0].title.set_text("Q")
-    axs[0, 1].title.set_text("Sigma")
+    axs[0, 1].title.set_text("Q")
+    axs[1, 0].title.set_text("Sigma")
     axs[1, 1].title.set_text("mu")
+
+    fig.suptitle(title)
+    fig.tight_layout()
+    # save the figure to disk or show it
+    if save_path is not None:
+        if title is None:
+            raise ValueError(f"saving requires title but title is {title}")
+        fig.savefig(os.path.join(save_path, title))
+        plt.close(fig)
+    else:
+        plt.show()
+
+
+def plot_info_parameters(J11, J12, J22, J21, title=None, save_path=None):
+    fig, axs = plt.subplots(2, 2)
+
+    im_J11 = axs[0, 0].matshow(J11.cpu().detach().numpy())
+    im_J12 = axs[0, 1].matshow(J12.cpu().detach().numpy())
+    im_J22 = axs[1, 0].matshow(J22.cpu().detach().numpy())
+    im_J21 = axs[1, 1].matshow(J21.cpu().detach().numpy())
+
+    fig.colorbar(im_J11, ax=axs[0, 0])
+    fig.colorbar(im_J12, ax=axs[0, 1])
+    fig.colorbar(im_J22, ax=axs[1, 0])
+    fig.colorbar(im_J21, ax=axs[1, 1])
+
+    axs[0, 0].axis("off")
+    axs[0, 1].axis("off")
+    axs[1, 0].axis("off")
+    axs[1, 1].axis("off")
+
+    axs[0, 0].title.set_text("J11")
+    axs[0, 1].title.set_text("J12")
+    axs[1, 0].title.set_text("J22")
+    axs[1, 1].title.set_text("J21")
 
     fig.suptitle(title)
     fig.tight_layout()
