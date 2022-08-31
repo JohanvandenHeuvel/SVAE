@@ -38,7 +38,7 @@ def info_marginalize(J11, J12, J22, h, logZ):
     # assert logZ < 0
     # J11_inv = torch.inverse(J11)
     # temp = J12.T @ J11_inv
-    temp = torch.linalg.solve(J11, J12)
+    # temp = torch.linalg.solve(J11, J12)
 
     # J_pred = J22 - J12.T @ inv(J11) @ J12
     # J_pred = symmetrize(J22 - temp @ J12)
@@ -291,9 +291,5 @@ def local_optimization(potentials, eta_theta, n_samples=1):
         )
         - logZ
     )
-
-    # print(logZ.item(), torch.tensordot(
-    #     potentials, pack_dense(E_node_stats[0], E_node_stats[1]), dims=3
-    # ).item())
 
     return samples, (E_init_stats, E_pair_stats), local_kld

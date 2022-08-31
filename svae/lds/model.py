@@ -126,6 +126,7 @@ class SVAE:
             Sigma, mu, _, _ = unpack_dense(
                 NormalInverseWishart(niw_param).expected_stats()
             )
+            # print(sorted(torch.abs(torch.linalg.eigvalsh(A)).cpu().detach().numpy(), reverse=True))
 
             # only use a subset of the data for plotting
             data = data[:200]
@@ -216,13 +217,15 @@ class SVAE:
         train_loss = []
         for epoch in range(epochs + 1):
 
+            print(f"> EPOCH {epoch} =====")
+
             total_loss = []
             for i, y in enumerate(dataloader):
 
                 if i >= len(dataloader) - 1:
                     continue
 
-                print(f">> ITER {i} EPOCH {epoch} =====")
+                print(f">> ITER {i} =====")
                 potentials = self.encode(y)
 
                 # remove dependency on previous iterations
@@ -265,7 +268,6 @@ class SVAE:
                     for i in range(len(nat_grad_pair))
                 ]
 
-                # print(f"\n ======== ITER {i} ======== \n")
                 # print(nat_grad_pair[0].cpu().detach().numpy())
                 # print()
                 # print(nat_grad_pair[1].cpu().detach().numpy())
@@ -292,6 +294,7 @@ class SVAE:
 
                 recon_loss = (num_batches * recon_loss) / len(data)
                 local_kld = (num_batches * local_kld) / len(data)
+                global_kld = global_kld / len(data)
 
                 kld_loss = global_kld + local_kld
 
@@ -314,7 +317,7 @@ class SVAE:
 
             train_loss.append(np.mean(total_loss, axis=0))
 
-            if epoch % max((epochs // 20), 1) == 0 or True:
+            if epoch % max((epochs // 20), 1) == 0:
                 print(
                     f"[{epoch}/{epochs + 1}] -- (recon:{train_loss[-1][0]}) (local kld:{train_loss[-1][1]}) (global kld: {train_loss[-1][2]})"
                 )
