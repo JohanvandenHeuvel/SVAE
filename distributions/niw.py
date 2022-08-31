@@ -49,63 +49,63 @@ class NormalInverseWishart(ExpDistribution):
         E[T4] = E[-1/2 muT inv(Sigma) mu]
         """
 
-        A, b, c, d = unpack_dense(self.nat_param)
-        # TODO Phi (S) and K are mixed up?
-        mniw = MatrixNormalInverseWishart(
-            [
-                A.squeeze(),
-                b.squeeze().unsqueeze(-1),
-                torch.tensor([[c]], device=self.device),
-                d,
-            ]
-        )
-        stats = mniw.expected_stats()
+        kappa, mu_0, Phi, nu = self.natural_to_standard()
 
-        # kappa, mu_0, Phi, nu = self.natural_to_standard()
-        #
-        # fudge = 1e-6
-        # _, p, _ = Phi.shape
-        #
-        # E_T2 = (
-        #     -0.5 * nu[..., None, None] * torch.inverse(Phi)
-        #     + fudge * torch.eye(p, device=self.device)[None, ...]
-        # )
-        # E_T3 = -2 * torch.bmm(E_T2, mu_0.unsqueeze(2)).squeeze(-1)
-        # E_T4 = -0.5 * (
-        #     torch.bmm(mu_0.unsqueeze(1), E_T3.unsqueeze(2)).squeeze() + p / kappa
-        # )
-        # # TODO are the signs here correct?
-        # E_T1 = -0.5 * (
-        #     torch.slogdet(Phi)[1]
-        #     - p * torch.log(torch.tensor([2], device=self.device))
-        #     - multidigamma(nu / 2, p)
-        # )
-        #
+        fudge = 1e-6
+        _, p, _ = Phi.shape
+
+        E_T2 = (
+            -0.5 * nu[..., None, None] * torch.inverse(Phi)
+            + fudge * torch.eye(p, device=self.device)[None, ...]
+        )
+        E_T3 = -2 * torch.bmm(E_T2, mu_0.unsqueeze(2)).squeeze(-1)
+        E_T4 = -0.5 * (
+            torch.bmm(mu_0.unsqueeze(1), E_T3.unsqueeze(2)).squeeze() + p / kappa
+        )
+        # TODO are the signs here correct?
+        E_T1 = -0.5 * (
+            torch.slogdet(Phi)[1]
+            - p * torch.log(torch.tensor([2], device=self.device))
+            - multidigamma(nu / 2, p)
+        )
+
         # assert torch.all(torch.linalg.eigvalsh((-2 * E_T2).squeeze()) >= 0.0)
-        #
-        # return pack_dense(E_T2, E_T3, E_T4, E_T1)
-        return pack_dense(stats[0], stats[1].squeeze(), stats[2].squeeze(), stats[3])
+
+        return pack_dense(E_T2, E_T3, E_T4, E_T1).squeeze()
+
+        # A, b, c, d = unpack_dense(self.nat_param)
+        # # TODO Phi (S) and K are mixed up?
+        # mniw = MatrixNormalInverseWishart(
+        #     [
+        #         A.squeeze(),
+        #         b.squeeze().unsqueeze(-1),
+        #         torch.tensor([[c]], device=self.device),
+        #         d,
+        #     ]
+        # )
+        # stats = mniw.expected_stats()
+        # return pack_dense(stats[0], stats[1].squeeze(), stats[2].squeeze(), stats[3])
 
     def logZ(self):
-        # kappa, mu_0, Phi, nu = self.natural_to_standard()
-        # p = mu_0.shape[-1]
-        # value = (
-        #     p * nu / 2 * torch.log(torch.tensor([2], device=self.device))
-        #     + torch.special.multigammaln(nu / 2, p)
-        #     - nu / 2 * torch.slogdet(Phi)[1]
-        #     - p / 2 * torch.log(kappa)
-        # )
-        # return torch.sum(value)
-        A, b, c, d = unpack_dense(self.nat_param)
-        mniw = MatrixNormalInverseWishart(
-            [
-                A.squeeze(),
-                b.squeeze().unsqueeze(-1),
-                torch.tensor([[c]], device=self.device),
-                d,
-            ]
+        kappa, mu_0, Phi, nu = self.natural_to_standard()
+        p = mu_0.shape[-1]
+        value = (
+            p * nu / 2 * torch.log(torch.tensor([2], device=self.device))
+            + torch.special.multigammaln(nu / 2, p)
+            - nu / 2 * torch.slogdet(Phi)[1]
+            - p / 2 * torch.log(kappa)
         )
-        return mniw.logZ()
+        return torch.sum(value)
+        # A, b, c, d = unpack_dense(self.nat_param)
+        # mniw = MatrixNormalInverseWishart(
+        #     [
+        #         A.squeeze(),
+        #         b.squeeze().unsqueeze(-1),
+        #         torch.tensor([[c]], device=self.device),
+        #         d,
+        #     ]
+        # )
+        # return mniw.logZ()
 
     def natural_to_standard(self):
         eta_2, eta_3, eta_4, eta_1 = unpack_dense(self.nat_param)

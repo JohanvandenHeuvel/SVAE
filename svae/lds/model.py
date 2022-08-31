@@ -314,7 +314,7 @@ class SVAE:
 
             train_loss.append(np.mean(total_loss, axis=0))
 
-            if epoch % max((epochs // 20), 1) == 0:
+            if epoch % max((epochs // 20), 1) == 0 or True:
                 print(
                     f"[{epoch}/{epochs + 1}] -- (recon:{train_loss[-1][0]}) (local kld:{train_loss[-1][1]}) (global kld: {train_loss[-1][2]})"
                 )

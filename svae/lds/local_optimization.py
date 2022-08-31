@@ -13,12 +13,12 @@ device = "cuda:0"
 
 
 def info_condition(J, h, J_obs, h_obs):
-    assert torch.all(torch.linalg.eigvalsh(J) >= 0.0)
-
-    assert torch.all(torch.linalg.eigvalsh(J_obs) >= 0.0)
-
-    assert torch.all(torch.linalg.eigvalsh((J + J_obs)) >= 0.0)
-
+    if not torch.all(torch.linalg.eigvalsh(J) >= 0.0):
+        raise ValueError(f"J not pd: {torch.linalg.eigvalsh(J)}")
+    if not torch.all(torch.linalg.eigvalsh(J_obs) >= 0.0):
+        raise ValueError(f"J_obs not pd: {torch.linalg.eigvalsh(J_obs)}")
+    if not torch.all(torch.linalg.eigvalsh(J + J_obs) >= 0.0):
+        raise ValueError(f"J + J_obs not pd: {torch.linalg.eigvalsh(J + J_obs)}")
     return J + J_obs, h + h_obs
 
 
@@ -83,6 +83,9 @@ def info_kalman_filter(init_params, pair_params, observations):
     (J, h), logZ = init_params
     J11, J12, J22, logZ_param = pair_params
 
+    if not torch.all(torch.linalg.eigvalsh(J) >= 0.0):
+        raise ValueError(f"init J not pd: {torch.linalg.eigvalsh(J)}")
+
     total_logZ = logZ
     forward_messages = []
     for i, (J_obs, h_obs) in enumerate(observations):
@@ -101,30 +104,30 @@ def info_rst_smoothing(J, h, cond_msg, pred_msg, pair_params, loc_next):
     J_pred, h_pred = pred_msg
     J11, J12, J22 = pair_params
 
-    # temp = J12 @ torch.inverse(J - J_pred + J22)
-    # J_smooth = J_cond + J11 - temp @ J12.T
-    # h_smooth = h_cond - temp @ (h - h_pred)
-    #
-    # loc, scale = info_to_standard(J_smooth, h_smooth)
-    # E_xnxT = -temp @ scale + outer_product(loc_next, loc)
-    # E_xxT = scale + outer_product(loc, loc)
-
-    L = torch.linalg.cholesky(J - J_pred + J22)
-    temp = torch.linalg.solve_triangular(L, J12.T, upper=False)
-    J_smooth = (J_cond + J11) - temp.T @ temp
-    h_smooth = (
-        h_cond
-        - temp.T
-        @ torch.linalg.solve_triangular(
-            L, (h - h_pred)[..., None], upper=False
-        ).squeeze()
-    )
+    temp = J12 @ torch.inverse(J - J_pred + J22)
+    J_smooth = J_cond + J11 - temp @ J12.T
+    h_smooth = h_cond - temp @ (h - h_pred)
 
     loc, scale = info_to_standard(J_smooth, h_smooth)
-    E_xnxT = -torch.linalg.solve_triangular(
-        L.T, torch.linalg.solve_triangular(L, J12.T @ scale, upper=False), upper=False
-    ) + outer_product(loc_next, loc)
+    E_xnxT = -temp @ scale + outer_product(loc_next, loc)
     E_xxT = scale + outer_product(loc, loc)
+
+    # L = torch.linalg.cholesky(J - J_pred + J22)
+    # temp = torch.linalg.solve_triangular(L, J12.T, upper=False)
+    # J_smooth = (J_cond + J11) - temp.T @ temp
+    # h_smooth = (
+    #     h_cond
+    #     - temp.T
+    #     @ torch.linalg.solve_triangular(
+    #         L, (h - h_pred)[..., None], upper=False
+    #     ).squeeze()
+    # )
+    #
+    # loc, scale = info_to_standard(J_smooth, h_smooth)
+    # E_xnxT = -torch.linalg.solve_triangular(
+    #     L.T, torch.linalg.solve_triangular(L, J12.T @ scale, upper=False), upper=False
+    # ) + outer_product(loc_next, loc)
+    # E_xxT = scale + outer_product(loc, loc)
 
     stats = (loc, E_xxT, E_xnxT)
 
