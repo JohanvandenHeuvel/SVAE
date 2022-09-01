@@ -6,7 +6,7 @@ from torch.utils.data import DataLoader
 
 from distributions.gaussian import natural_to_info
 from matrix_ops import pack_dense, unpack_dense
-from plot.lds_plot import plot_observations, plot, plot_latents, plot_parameters, plot_info_parameters
+from plot.lds_plot import plot_observations, plot, plot_latents, plot_parameters, plot_info_parameters, plot_potentials
 from svae.gradient import natural_gradient, SGDOptim
 from svae.lds.global_optimization import initialize_global_lds_parameters, prior_kld_lds
 from svae.lds.local_optimization import local_optimization, standard_pair_params
@@ -140,6 +140,8 @@ class SVAE:
             n_samples = 50
             decoded_means, decoded_vars, latent_samples = get_samples(n_samples)
 
+            plot_potentials(potentials, prefix=prefix)
+
             plot_parameters(
                 A, Q, Sigma, mu, title=f"{epoch}_params", save_path=self.save_path
             )
@@ -157,7 +159,7 @@ class SVAE:
             )
 
             plot_latents(
-                latents=latent_samples.mean(0).T.cpu().detach().numpy(),
+                latents=latent_samples.cpu().detach().numpy(),
                 prefix=prefix,
                 title=f"{epoch}_latents",
                 save_path=self.save_path,
@@ -318,6 +320,8 @@ class SVAE:
                         kld_weight * global_kld.item(),
                     )
                 )
+
+                break
 
             train_loss.append(np.mean(total_loss, axis=0))
 
