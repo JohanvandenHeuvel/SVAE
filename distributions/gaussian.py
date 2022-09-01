@@ -54,8 +54,6 @@ def standard_to_natural(loc, scale):
     eta_1 = torch.bmm(scale_inv, loc[..., None]).squeeze(-1)
     eta_2 = -1 / 2 * scale_inv
 
-    return pack_dense(eta_2, eta_1)
-
 
 def standard_to_info(loc, scale):
     J = torch.inverse(scale)
@@ -125,6 +123,10 @@ class Gaussian(ExpDistribution):
 
     def natural_to_standard(self):
         eta_2, eta_1, _, _ = unpack_dense(self.nat_param)
+
+        if not torch.isclose(eta_2.squeeze(), eta_2.squeeze().mT, atol=1e-6).all(-2).all(-1):
+            print(eta_2.squeeze().cpu().detach().numpy())
+            raise ValueError("(natural) Scale matrix not symmetric")
 
         scale = -1 / 2 * torch.inverse(eta_2)
         loc = torch.bmm(scale, eta_1[..., None]).squeeze()
