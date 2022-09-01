@@ -223,4 +223,13 @@ def plot_potentials(potentials, prefix, title=None, save_path=None):
             x, h[:, dim_i] - J[:, dim_i], h[:, dim_i] + J[:, dim_i], alpha=0.1
         )
 
-    plt.show()
+    fig.suptitle(title)
+    fig.tight_layout()
+    # save the figure to disk or show it
+    if save_path is not None:
+        if title is None:
+            raise ValueError(f"saving requires title but title is {title}")
+        fig.savefig(os.path.join(save_path, title))
+        plt.close(fig)
+    else:
+        plt.show()

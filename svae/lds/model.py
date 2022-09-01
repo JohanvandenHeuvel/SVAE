@@ -6,7 +6,14 @@ from torch.utils.data import DataLoader
 
 from distributions.gaussian import natural_to_info
 from matrix_ops import pack_dense, unpack_dense
-from plot.lds_plot import plot_observations, plot, plot_latents, plot_parameters, plot_info_parameters, plot_potentials
+from plot.lds_plot import (
+    plot_observations,
+    plot,
+    plot_latents,
+    plot_parameters,
+    plot_info_parameters,
+    plot_potentials,
+)
 from svae.gradient import natural_gradient, SGDOptim
 from svae.lds.global_optimization import initialize_global_lds_parameters, prior_kld_lds
 from svae.lds.local_optimization import local_optimization, standard_pair_params
@@ -140,14 +147,24 @@ class SVAE:
             n_samples = 50
             decoded_means, decoded_vars, latent_samples = get_samples(n_samples)
 
-            plot_potentials(potentials, prefix=prefix)
+            plot_potentials(
+                potentials,
+                prefix=prefix,
+                title=f"{epoch}_potentials",
+                save_path=self.save_path,
+            )
 
             plot_parameters(
                 A, Q, Sigma, mu, title=f"{epoch}_params", save_path=self.save_path
             )
 
             plot_info_parameters(
-                -1 * J11, -2 * J12, -2 * J22, -2 * J12.T, title=f"{epoch}_info_params", save_path=self.save_path
+                -1 * J11,
+                -2 * J12,
+                -2 * J22,
+                -2 * J12.T,
+                title=f"{epoch}_info_params",
+                save_path=self.save_path,
             )
 
             plot(
