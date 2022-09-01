@@ -59,14 +59,26 @@ def plot_latents(latents, prefix, title=None, save_path=None):
     latents:
         Sampled latent states, from Normal(mean, variance).
     """
-    N = len(latents)
-    fig, axs = plt.subplots(N, 1, figsize=(10, N * 4))
-    for j in range(N):
-        axs[j].plot(latents[j])
-        axs[j].plot(
+    n_samples, sample_length, n_latents = latents.shape
+
+    fig, axs = plt.subplots(n_latents, 1, figsize=(10, n_latents * 4))
+    for dim_i in range(n_latents):
+        latent_i = latents[..., dim_i]
+        ax_i = axs[dim_i]
+
+        # plot some samples
+        for sample_j in range(5):
+            ax_i.plot(latent_i[sample_j], "--", alpha=0.4)
+
+        # plot mean
+        ax_i.plot(latent_i.mean(0), linewidth=2)
+
+        # plot vertical line for prefix
+        ax_i.plot(
             [prefix - 0.5, prefix - 0.5],
-            [latents[j].min(), latents[j].max()],
+            [ax_i.get_ylim()[0], ax_i.get_ylim()[1]],
             "--",
+            color="r",
             linewidth=2,
         )
 
