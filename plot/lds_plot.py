@@ -2,6 +2,9 @@ import os
 
 import matplotlib.pyplot as plt
 import numpy as np
+import torch.linalg
+
+from matrix_ops import unpack_dense
 
 
 def plot_observations(obs, samples, variance, title="plot", save_path=None):
@@ -198,3 +201,26 @@ def plot_info_parameters(J11, J12, J22, J21, title=None, save_path=None):
         plt.close(fig)
     else:
         plt.show()
+
+
+def plot_potentials(potentials, prefix, title=None, save_path=None):
+
+    J, h, _, _ = unpack_dense(potentials)
+    J = torch.linalg.diagonal(J)
+
+    J = J[:prefix].cpu().detach().numpy()
+    h = h[:prefix].cpu().detach().numpy()
+
+    x = np.linspace(0, prefix, prefix)
+
+    _, n_latents = J.shape
+
+    fig, axs = plt.subplots(n_latents, 1, figsize=(10, n_latents * 4))
+    for dim_i in range(n_latents):
+        ax_i = axs[dim_i]
+        ax_i.plot(h[:, dim_i])
+        ax_i.fill_between(
+            x, h[:, dim_i] - J[:, dim_i], h[:, dim_i] + J[:, dim_i], alpha=0.1
+        )
+
+    plt.show()
