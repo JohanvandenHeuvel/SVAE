@@ -134,4 +134,15 @@ class Gaussian(ExpDistribution):
     def rsample(self, n_samples=1):
         """get samples using the re-parameterization trick and natural parameters"""
         loc, scale = self.natural_to_standard()
+
+        if not torch.isclose(scale.squeeze(), scale.squeeze().mT, atol=1e-6).all(-2).all(-1):
+            print(scale.squeeze().cpu().detach().numpy())
+            raise ValueError("Scale matrix not symmetric")
+
+        if not torch.linalg.cholesky_ex(scale.squeeze()).info.eq(0):
+            print(scale.squeeze().cpu().detach().numpy())
+            print(sorted(torch.abs(torch.linalg.eigvalsh(scale.squeeze())).cpu().detach().numpy(), reverse=True))
+            raise ValueError("Scale matrix not pos eigs")
+
+
         return MultivariateNormal(loc, scale.squeeze()).rsample([n_samples])
