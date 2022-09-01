@@ -338,14 +338,12 @@ class SVAE:
                     )
                 )
 
-                break
-
             train_loss.append(np.mean(total_loss, axis=0))
+            print(
+                f"[{epoch}/{epochs + 1}]; {train_loss[-1].sum()}; (recon, local, global); {train_loss[-1]})"
+            )
 
             if epoch % max((epochs // 20), 1) == 0:
-                print(
-                    f"[{epoch}/{epochs + 1}] -- {train_loss[-1].sum()} (recon:{train_loss[-1][0]}) (local kld:{train_loss[-1][1]}) (global kld: {train_loss[-1][2]})"
-                )
                 self.save_and_log(data, epoch, (niw_param, mniw_param))
 
         print("Finished training of the SVAE")

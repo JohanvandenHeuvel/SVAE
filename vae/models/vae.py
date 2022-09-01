@@ -132,7 +132,7 @@ class VAE(nn.Module):
             path = pathlib.Path().resolve()
         name = f"{self.name}_{affix}.pt" if affix is not None else f"{self.name}.pt"
         torch.save(self.state_dict(), os.path.join(path, name))
-        print(f"saved model to {os.path.join(path, name)}")
+        # print(f"saved model to {os.path.join(path, name)}")
 
     def load_model(self, path=None, affix=None):
         """load model from disk"""
