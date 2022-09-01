@@ -136,10 +136,11 @@ def plot(
 def plot_parameters(A, Q, Sigma, mu, title=None, save_path=None):
     fig, axs = plt.subplots(2, 2)
 
-    im_A = axs[0, 0].matshow(A.cpu().detach().numpy())
-    im_Q = axs[0, 1].matshow(Q.cpu().detach().numpy())
-    im_Sigma = axs[1, 0].matshow(Sigma.cpu().detach().numpy())
-    im_mu = axs[1, 1].matshow(mu[..., None].cpu().detach().numpy())
+    cmap = "coolwarm"
+    im_A = axs[0, 0].matshow(A.cpu().detach().numpy(), cmap=cmap)
+    im_Q = axs[0, 1].matshow(Q.cpu().detach().numpy(), cmap=cmap)
+    im_Sigma = axs[1, 0].matshow(Sigma.cpu().detach().numpy(), cmap=cmap)
+    im_mu = axs[1, 1].matshow(mu[..., None].cpu().detach().numpy(), cmap=cmap)
 
     fig.colorbar(im_A, ax=axs[0, 0])
     fig.colorbar(im_Q, ax=axs[0, 1])
@@ -171,10 +172,11 @@ def plot_parameters(A, Q, Sigma, mu, title=None, save_path=None):
 def plot_info_parameters(J11, J12, J22, J21, title=None, save_path=None):
     fig, axs = plt.subplots(2, 2)
 
-    im_J11 = axs[0, 0].matshow(J11.cpu().detach().numpy())
-    im_J12 = axs[0, 1].matshow(J12.cpu().detach().numpy())
-    im_J22 = axs[1, 0].matshow(J22.cpu().detach().numpy())
-    im_J21 = axs[1, 1].matshow(J21.cpu().detach().numpy())
+    cmap = "coolwarm"
+    im_J11 = axs[0, 0].matshow(J11.cpu().detach().numpy(), cmap=cmap)
+    im_J12 = axs[0, 1].matshow(J12.cpu().detach().numpy(), cmap=cmap)
+    im_J22 = axs[1, 0].matshow(J22.cpu().detach().numpy(), cmap=cmap)
+    im_J21 = axs[1, 1].matshow(J21.cpu().detach().numpy(), cmap=cmap)
 
     fig.colorbar(im_J11, ax=axs[0, 0])
     fig.colorbar(im_J12, ax=axs[0, 1])
