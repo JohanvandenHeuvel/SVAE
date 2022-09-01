@@ -343,7 +343,7 @@ class SVAE:
                 f"[{epoch}/{epochs + 1}]; {train_loss[-1].sum()}; (recon, local, global); {train_loss[-1]})"
             )
 
-            if epoch % max((epochs // 20), 1) == 0:
+            if epoch % max((epochs // 20), 1) == 0 or True:
                 self.save_and_log(data, epoch, (niw_param, mniw_param))
 
         print("Finished training of the SVAE")
