@@ -13,12 +13,12 @@ device = "cuda:0"
 
 
 def info_condition(J, h, J_obs, h_obs):
-    if not torch.all(torch.linalg.eigvalsh(J) >= 0.0):
-        raise ValueError(f"J not pd: {torch.linalg.eigvalsh(J)}")
-    if not torch.all(torch.linalg.eigvalsh(J_obs) >= 0.0):
-        raise ValueError(f"J_obs not pd: {torch.linalg.eigvalsh(J_obs)}")
-    if not torch.all(torch.linalg.eigvalsh(J + J_obs) >= 0.0):
-        raise ValueError(f"J + J_obs not pd: {torch.linalg.eigvalsh(J + J_obs)}")
+    # if not torch.all(torch.linalg.eigvalsh(J) >= 0.0):
+    #     raise ValueError(f"J not pd: {torch.linalg.eigvalsh(J)}")
+    # if not torch.all(torch.linalg.eigvalsh(J_obs) >= 0.0):
+    #     raise ValueError(f"J_obs not pd: {torch.linalg.eigvalsh(J_obs)}")
+    # if not torch.all(torch.linalg.eigvalsh(J + J_obs) >= 0.0):
+    #     raise ValueError(f"J + J_obs not pd: {torch.linalg.eigvalsh(J + J_obs)}")
     return J + J_obs, h + h_obs
 
 
