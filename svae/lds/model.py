@@ -208,7 +208,7 @@ class SVAE:
             data = torch.tensor(obs)
         else:
             data = obs.clone().detach()
-        data = data.to(self.vae.device).float()
+        data = data.to(self.vae.device).double()
         dataloader = torch.utils.data.DataLoader(
             data, batch_size=batch_size, shuffle=False
         )

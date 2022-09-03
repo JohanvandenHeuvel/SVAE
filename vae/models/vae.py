@@ -91,6 +91,7 @@ class VAE(nn.Module):
         self.log_var_dec.apply(init_weights)
 
         self.to(self.device)
+        self.double()
 
     def encode(self, x):
         return self.mu_enc(x), self.log_var_enc(x)
