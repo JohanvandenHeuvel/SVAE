@@ -21,6 +21,9 @@ from vae import VAE
 
 from distributions import MatrixNormalInverseWishart, NormalInverseWishart, Gaussian
 
+import wandb
+
+
 np.set_printoptions(
     edgeitems=30,
     linewidth=100000,
@@ -129,7 +132,7 @@ class SVAE:
             self.save_model(epoch)
 
             J11, J12, J22, _ = MatrixNormalInverseWishart(mniw_param).expected_stats()
-            A, Q = standard_pair_params(-2 * J11, -1 * J12, -2 * J22)
+            # A, Q = standard_pair_params(-2 * J11, -1 * J12, -2 * J22)
             Sigma, mu, _, _ = unpack_dense(
                 NormalInverseWishart(niw_param).expected_stats()
             )
@@ -147,18 +150,18 @@ class SVAE:
             n_samples = 50
             decoded_means, decoded_vars, latent_samples = get_samples(n_samples)
 
-            plot_potentials(
+            fig_potentials = plot_potentials(
                 potentials,
                 prefix=prefix,
                 title=f"{epoch}_potentials",
                 save_path=self.save_path,
             )
 
-            plot_parameters(
-                A, Q, Sigma, mu, title=f"{epoch}_params", save_path=self.save_path
-            )
+            # fig_params = plot_parameters(
+            #     A, Q, Sigma, mu, title=f"{epoch}_params", save_path=self.save_path
+            # )
 
-            plot_info_parameters(
+            fig_info_params = plot_info_parameters(
                 -1 * J11,
                 -2 * J12,
                 -2 * J22,
@@ -167,7 +170,7 @@ class SVAE:
                 save_path=self.save_path,
             )
 
-            plot(
+            fig_obs = plot(
                 obs=data.cpu().detach().numpy(),
                 samples=decoded_means.cpu().detach().numpy(),
                 prefix=prefix,
@@ -175,11 +178,21 @@ class SVAE:
                 save_path=self.save_path,
             )
 
-            plot_latents(
+            fig_latents = plot_latents(
                 latents=latent_samples.cpu().detach().numpy(),
                 prefix=prefix,
                 title=f"{epoch}_latents",
                 save_path=self.save_path,
+            )
+
+            wandb.log(
+                {
+                    "potentials": fig_potentials,
+                    # "params": fig_params,
+                    "info_params": fig_info_params,
+                    "obs": fig_obs,
+                    "latents": fig_latents,
+                }
             )
 
     def fit(self, obs, epochs, batch_size, latent_dim, kld_weight):
@@ -291,6 +304,15 @@ class SVAE:
                     for i in range(len(nat_grad_pair))
                 ]
 
+                wandb.log(
+                    {
+                        "nat_grad_ExxT": nat_grad_pair[0],
+                        "nat_grad_ExnxT": nat_grad_pair[1],
+                        "nat_grad_ExnxnT": nat_grad_pair[2],
+                        "nat_grad_scalar": nat_grad_pair[3],
+                    }
+                )
+
                 # print(nat_grad_pair[0].cpu().detach().numpy())
                 # print()
                 # print(nat_grad_pair[1].cpu().detach().numpy())
@@ -324,6 +346,14 @@ class SVAE:
                 loss = recon_loss + kld_weight * kld_loss
                 # print(f"{global_kld:.3f} \t {local_kld.item():.3f} \t {recon_loss:.3f}")
 
+                wandb.log(
+                    {
+                        "recon_loss": recon_loss,
+                        "local_kld": local_kld,
+                        "global_kld": global_kld,
+                    }
+                )
+
                 optimizer.zero_grad()
                 # compute gradients
                 loss.backward()
@@ -348,4 +378,3 @@ class SVAE:
 
         print("Finished training of the SVAE")
         self.save_and_log(data, "end", (niw_param, mniw_param))
-        return train_loss

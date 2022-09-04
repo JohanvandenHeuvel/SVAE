@@ -11,6 +11,8 @@ from plot.gmm_plot import plot_loss
 from svae.lds import SVAE
 from vae import VAE, resVAE
 
+import wandb
+
 LATENT_DIM = 10
 
 hyperparameters = {
@@ -64,6 +66,9 @@ def get_network():
 
 
 def main():
+    wandb.init(project="SVAE")
+    wandb.config = hyperparameters
+
     folder_name = make_folder()
     save_dict(hyperparameters, save_path=folder_name, name="hyperparameters")
 
@@ -73,10 +78,7 @@ def main():
 
     model = SVAE(network, save_path=os.path.join(folder_name, "svae"))
     # model.load_model("/var/tmp/vandenheu/SVAE/svae/lds/results/date:08_19-time:14_37_25/svae", 2)
-    train_loss = model.fit(observations, **hyperparameters["SVAE_train_parameters"])
-    plot_loss(
-        train_loss, title="svae_loss", save_path=os.path.join(folder_name, "svae")
-    )
+    model.fit(observations, **hyperparameters["SVAE_train_parameters"])
 
 
 if __name__ == "__main__":

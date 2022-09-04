@@ -5,6 +5,7 @@ import numpy as np
 import torch.linalg
 
 from matrix_ops import unpack_dense
+from svae.lds.local_optimization import standard_pair_params
 
 
 def plot_observations(obs, samples, variance, title="plot", save_path=None):
@@ -27,14 +28,15 @@ def plot_observations(obs, samples, variance, title="plot", save_path=None):
 
     fig.suptitle(title)
     fig.tight_layout()
-    # save the figure to disk or show it
-    if save_path is not None:
-        if title is None:
-            raise ValueError(f"saving requires title but title is {title}")
-        fig.savefig(os.path.join(save_path, title))
-        plt.close(fig)
-    else:
-        plt.show()
+    # # save the figure to disk or show it
+    # if save_path is not None:
+    #     if title is None:
+    #         raise ValueError(f"saving requires title but title is {title}")
+    #     fig.savefig(os.path.join(save_path, title))
+    #     plt.close(fig)
+    # else:
+    #     plt.show()
+    return fig
 
 
 def plot_video_observations(ax, obs, prefix):
@@ -64,17 +66,17 @@ def plot_latents(latents, prefix, title=None, save_path=None):
     """
     n_samples, sample_length, n_latents = latents.shape
 
-    fig, axs = plt.subplots(n_latents, 1, figsize=(10, n_latents * 4))
+    fig, axs = plt.subplots(1, 1, figsize=(10, 10))
     for dim_i in range(n_latents):
         latent_i = latents[..., dim_i]
-        ax_i = axs[dim_i]
+        ax_i = axs
 
-        # plot some samples
-        for sample_j in range(5):
-            ax_i.plot(latent_i[sample_j], "--", alpha=0.4)
+        # # plot some samples
+        # for sample_j in range(5):
+        #     ax_i.plot(latent_i[sample_j], "--", alpha=0.4)
 
         # plot mean
-        ax_i.plot(latent_i.mean(0), linewidth=2)
+        ax_i.plot(latent_i.mean(0), linewidth=2, alpha=0.8)
 
         # plot vertical line for prefix
         ax_i.plot(
@@ -87,14 +89,15 @@ def plot_latents(latents, prefix, title=None, save_path=None):
 
     fig.suptitle(title)
     fig.tight_layout()
-    # save the figure to disk or show it
-    if save_path is not None:
-        if title is None:
-            raise ValueError(f"saving requires title but title is {title}")
-        fig.savefig(os.path.join(save_path, title))
-        plt.close(fig)
-    else:
-        plt.show()
+    # # save the figure to disk or show it
+    # if save_path is not None:
+    #     if title is None:
+    #         raise ValueError(f"saving requires title but title is {title}")
+    #     fig.savefig(os.path.join(save_path, title))
+    #     plt.close(fig)
+    # else:
+    #     plt.show()
+    return fig
 
 
 def plot(
@@ -123,14 +126,15 @@ def plot(
 
     fig.suptitle(title)
     fig.tight_layout()
-    # save the figure to disk or show it
-    if save_path is not None:
-        if title is None:
-            raise ValueError(f"saving requires title but title is {title}")
-        fig.savefig(os.path.join(save_path, title))
-        plt.close(fig)
-    else:
-        plt.show()
+    # # save the figure to disk or show it
+    # if save_path is not None:
+    #     if title is None:
+    #         raise ValueError(f"saving requires title but title is {title}")
+    #     fig.savefig(os.path.join(save_path, title))
+    #     plt.close(fig)
+    # else:
+    #     plt.show()
+    return fig
 
 
 def plot_parameters(A, Q, Sigma, mu, title=None, save_path=None):
@@ -159,18 +163,21 @@ def plot_parameters(A, Q, Sigma, mu, title=None, save_path=None):
 
     fig.suptitle(title)
     fig.tight_layout()
-    # save the figure to disk or show it
-    if save_path is not None:
-        if title is None:
-            raise ValueError(f"saving requires title but title is {title}")
-        fig.savefig(os.path.join(save_path, title))
-        plt.close(fig)
-    else:
-        plt.show()
+    # # save the figure to disk or show it
+    # if save_path is not None:
+    #     if title is None:
+    #         raise ValueError(f"saving requires title but title is {title}")
+    #     fig.savefig(os.path.join(save_path, title))
+    #     plt.close(fig)
+    # else:
+    #     plt.show()
+    return fig
 
 
 def plot_info_parameters(J11, J12, J22, J21, title=None, save_path=None):
-    fig, axs = plt.subplots(2, 2)
+    fig, axs = plt.subplots(2, 3)
+
+    A, Q = standard_pair_params(J11, J12, J22)
 
     cmap = "coolwarm"
     im_J11 = axs[0, 0].matshow(J11.cpu().detach().numpy(), cmap=cmap)
@@ -178,31 +185,44 @@ def plot_info_parameters(J11, J12, J22, J21, title=None, save_path=None):
     im_J22 = axs[1, 0].matshow(J22.cpu().detach().numpy(), cmap=cmap)
     im_J21 = axs[1, 1].matshow(J21.cpu().detach().numpy(), cmap=cmap)
 
+    im_A = axs[0, 2].matshow(A.cpu().detach().numpy(), cmap=cmap)
+    im_Q = axs[1, 2].matshow(Q.cpu().detach().numpy(), cmap=cmap)
+
     fig.colorbar(im_J11, ax=axs[0, 0])
     fig.colorbar(im_J12, ax=axs[0, 1])
     fig.colorbar(im_J22, ax=axs[1, 0])
     fig.colorbar(im_J21, ax=axs[1, 1])
+
+    fig.colorbar(im_A, ax=axs[0, 2])
+    fig.colorbar(im_Q, ax=axs[1, 2])
 
     axs[0, 0].axis("off")
     axs[0, 1].axis("off")
     axs[1, 0].axis("off")
     axs[1, 1].axis("off")
 
+    axs[0, 2].axis("off")
+    axs[1, 2].axis("off")
+
     axs[0, 0].title.set_text("J11")
     axs[0, 1].title.set_text("J12")
     axs[1, 0].title.set_text("J22")
     axs[1, 1].title.set_text("J21")
 
+    axs[0, 2].title.set_text("A")
+    axs[1, 2].title.set_text("Q")
+
     fig.suptitle(title)
     fig.tight_layout()
-    # save the figure to disk or show it
-    if save_path is not None:
-        if title is None:
-            raise ValueError(f"saving requires title but title is {title}")
-        fig.savefig(os.path.join(save_path, title))
-        plt.close(fig)
-    else:
-        plt.show()
+    # # save the figure to disk or show it
+    # if save_path is not None:
+    #     if title is None:
+    #         raise ValueError(f"saving requires title but title is {title}")
+    #     fig.savefig(os.path.join(save_path, title))
+    #     plt.close(fig)
+    # else:
+    #     plt.show()
+    return fig
 
 
 def plot_potentials(potentials, prefix, title=None, save_path=None):
@@ -217,21 +237,22 @@ def plot_potentials(potentials, prefix, title=None, save_path=None):
 
     _, n_latents = J.shape
 
-    fig, axs = plt.subplots(n_latents, 1, figsize=(10, n_latents * 4))
+    fig, axs = plt.subplots(1, 1, figsize=(10, 10))
     for dim_i in range(n_latents):
-        ax_i = axs[dim_i]
+        ax_i = axs
         ax_i.plot(h[:, dim_i])
-        ax_i.fill_between(
-            x, h[:, dim_i] - J[:, dim_i], h[:, dim_i] + J[:, dim_i], alpha=0.1
-        )
+        # ax_i.fill_between(
+        #     x, h[:, dim_i] - J[:, dim_i], h[:, dim_i] + J[:, dim_i], alpha=0.1
+        # )
 
     fig.suptitle(title)
     fig.tight_layout()
-    # save the figure to disk or show it
-    if save_path is not None:
-        if title is None:
-            raise ValueError(f"saving requires title but title is {title}")
-        fig.savefig(os.path.join(save_path, title))
-        plt.close(fig)
-    else:
-        plt.show()
+    # # save the figure to disk or show it
+    # if save_path is not None:
+    #     if title is None:
+    #         raise ValueError(f"saving requires title but title is {title}")
+    #     fig.savefig(os.path.join(save_path, title))
+    #     plt.close(fig)
+    # else:
+    #     plt.show()
+    return fig

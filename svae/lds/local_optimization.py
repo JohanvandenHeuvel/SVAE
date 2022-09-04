@@ -8,6 +8,7 @@ from distributions.gaussian import (
     info_to_natural,
     natural_to_info,
 )
+import wandb
 
 device = "cuda:0"
 
@@ -266,6 +267,11 @@ def local_optimization(potentials, eta_theta, n_samples=1):
     J11 = -2 * J11
     J12 = -1 * J12
     J22 = -2 * J22
+
+    A, Q = standard_pair_params(J11, J12, J22)
+    wandb.log({
+        "J11": J11, "J12": J12, "J22": J22, "A": A, "Q": Q
+    })
 
     """
     optimize local parameters
