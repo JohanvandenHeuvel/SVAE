@@ -9,8 +9,13 @@ from distributions.gaussian import (
     natural_to_info,
 )
 import wandb
+import random
+import numpy as np
 
 device = "cuda:0"
+torch.manual_seed(0)
+random.seed(0)
+np.random.seed(0)
 
 
 def info_condition(J, h, J_obs, h_obs):
@@ -269,9 +274,7 @@ def local_optimization(potentials, eta_theta, n_samples=1):
     J22 = -2 * J22
 
     A, Q = standard_pair_params(J11, J12, J22)
-    wandb.log({
-        "J11": J11, "J12": J12, "J22": J22, "A": A, "Q": Q
-    })
+    wandb.log({"J11": J11, "J12": J12, "J22": J22, "A": A, "Q": Q})
 
     """
     optimize local parameters

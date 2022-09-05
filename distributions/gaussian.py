@@ -1,9 +1,16 @@
 import torch
 from scipy.stats import multivariate_normal
+import random
+import numpy as np
 
 from matrix_ops import pack_dense, unpack_dense, is_posdef
 from .distribution import ExpDistribution
 from torch.distributions import MultivariateNormal
+
+
+torch.manual_seed(0)
+random.seed(0)
+np.random.seed(0)
 
 
 def sample(loc, Sigma, n=1):
@@ -124,11 +131,17 @@ class Gaussian(ExpDistribution):
     def natural_to_standard(self):
         eta_2, eta_1, _, _ = unpack_dense(self.nat_param)
 
-        if not torch.isclose(eta_2.squeeze(), eta_2.squeeze().mT, atol=1e-6).all(-2).all(-1):
+        if (
+            not torch.isclose(eta_2.squeeze(), eta_2.squeeze().mT, atol=1e-6)
+            .all(-2)
+            .all(-1)
+        ):
             print(eta_2.squeeze().cpu().detach().numpy())
             raise ValueError("(natural) Scale matrix not symmetric")
 
-        L = torch.linalg.cholesky(-2 * eta_2 + 1e-6 * torch.eye(len(eta_2), device=eta_2.device))
+        L = torch.linalg.cholesky(
+            -2 * eta_2 + 1e-6 * torch.eye(len(eta_2), device=eta_2.device)
+        )
         # scale = -1 / 2 * torch.inverse(eta_2)
         scale = torch.cholesky_inverse(L)
         loc = torch.bmm(scale, eta_1[..., None]).squeeze()
@@ -139,14 +152,25 @@ class Gaussian(ExpDistribution):
         """get samples using the re-parameterization trick and natural parameters"""
         loc, scale = self.natural_to_standard()
 
-        if not torch.isclose(scale.squeeze(), scale.squeeze().mT, atol=1e-6).all(-2).all(-1):
+        if (
+            not torch.isclose(scale.squeeze(), scale.squeeze().mT, atol=1e-6)
+            .all(-2)
+            .all(-1)
+        ):
             print(scale.squeeze().cpu().detach().numpy())
             raise ValueError("Scale matrix not symmetric")
 
         if not torch.linalg.cholesky_ex(scale.squeeze()).info.eq(0):
             print(scale.squeeze().cpu().detach().numpy())
-            print(sorted(torch.abs(torch.linalg.eigvalsh(scale.squeeze())).cpu().detach().numpy(), reverse=True))
+            print(
+                sorted(
+                    torch.abs(torch.linalg.eigvalsh(scale.squeeze()))
+                    .cpu()
+                    .detach()
+                    .numpy(),
+                    reverse=True,
+                )
+            )
             raise ValueError("Scale matrix not pos eigs")
-
 
         return MultivariateNormal(loc, scale.squeeze()).rsample([n_samples])

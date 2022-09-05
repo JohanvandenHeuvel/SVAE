@@ -1,6 +1,7 @@
 import os
 
 import numpy as np
+import random
 import torch
 from matplotlib import pyplot as plt
 from torch.utils.data import DataLoader
@@ -23,6 +24,10 @@ from vae import VAE
 from distributions import MatrixNormalInverseWishart, NormalInverseWishart, Gaussian
 
 import wandb
+
+torch.manual_seed(0)
+random.seed(0)
+np.random.seed(0)
 
 
 np.set_printoptions(
