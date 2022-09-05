@@ -2,6 +2,7 @@ import os
 
 import numpy as np
 import torch
+from matplotlib import pyplot as plt
 from torch.utils.data import DataLoader
 
 from distributions.gaussian import natural_to_info
@@ -195,6 +196,8 @@ class SVAE:
                 }
             )
 
+            plt.close("all")
+
     def fit(self, obs, epochs, batch_size, latent_dim, kld_weight):
         """
         Find the optimum for global variational parameter eta_theta, and encoder/decoder parameters.
@@ -310,6 +313,10 @@ class SVAE:
                         "nat_grad_ExnxT": nat_grad_pair[1],
                         "nat_grad_ExnxnT": nat_grad_pair[2],
                         "nat_grad_scalar": nat_grad_pair[3],
+                        "nat_param_K": mniw_param[0],
+                        "nat_param_M": mniw_param[1],
+                        "nat_param_Phi": mniw_param[2],
+                        "nat_param_nu": mniw_param[3],
                     }
                 )
 
