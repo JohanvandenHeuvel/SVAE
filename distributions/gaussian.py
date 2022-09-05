@@ -139,8 +139,11 @@ class Gaussian(ExpDistribution):
             print(eta_2.squeeze().cpu().detach().numpy())
             raise ValueError("(natural) Scale matrix not symmetric")
 
+        # L = torch.linalg.cholesky(
+        #     -2 * eta_2 + 1e-6 * torch.eye(len(eta_2), device=eta_2.device)
+        # )
         L = torch.linalg.cholesky(
-            -2 * eta_2 + 1e-6 * torch.eye(len(eta_2), device=eta_2.device)
+            -2 * eta_2
         )
         # scale = -1 / 2 * torch.inverse(eta_2)
         scale = torch.cholesky_inverse(L)

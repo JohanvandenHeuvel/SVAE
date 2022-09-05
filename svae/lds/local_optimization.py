@@ -1,4 +1,5 @@
 import torch
+import pandas as pd
 
 from distributions import MatrixNormalInverseWishart, NormalInverseWishart
 from matrix_ops import pack_dense, outer_product, is_posdef, unpack_dense, symmetrize
@@ -100,6 +101,10 @@ def info_kalman_filter(init_params, pair_params, observations):
         J, h, logZ = info_predict(J_cond, h_cond, J11, J12, J22, logZ_param)
         total_logZ += logZ.squeeze()
         forward_messages.append(((J_cond, h_cond), (J, h)))
+        # wandb.log({
+        #     "J_eig": torch.linalg.eigvalsh(J),
+        #     "J_obs_eig": torch.linalg.eigvalsh(J_obs),
+        # })
 
     total_logZ += lognorm(J, h)
 
@@ -189,6 +194,7 @@ def info_kalman_smoothing(forward_messages, pair_params):
         J_smooth, h_smooth, stats = info_rst_smoothing(
             J_smooth, h_smooth, cond_msg, pred_msg, pair_params, loc_next
         )
+        # wandb.log({"J_smooth_eig": torch.linalg.eigvalsh(J_smooth)})
         backward_messages.append((J_smooth, h_smooth))
         expected_stats.append(stats)
 
@@ -207,6 +213,7 @@ def info_sample_backward(forward_messages, pair_params, n_samples):
         J, h = condition(J_cond, h_cond, next_sample, J11, J12)
         # Sample from multiple Gaussians using as mean [h_0, ..., h_i, ...]
         # and block matrix with J on the diagonal as variance.
+        # wandb.log({"J_samplebackward_eig": torch.linalg.eigvalsh(J)})
         _J = torch.kron(torch.eye(len(h), device=J.device), J.contiguous())
         _h = h.flatten()
         next_sample = (
@@ -276,6 +283,16 @@ def local_optimization(potentials, eta_theta, n_samples=1):
 
     A, Q = standard_pair_params(J11, J12, J22)
     wandb.log({"J11": J11, "J12": J12, "J22": J22, "A": A, "Q": Q})
+
+    eigenvalue_dataframe = pd.DataFrame.from_dict({
+        "J11_eig": torch.linalg.eigvalsh(J11).cpu().detach().numpy(),
+        "J12_eig": torch.linalg.eigvalsh(J12).cpu().detach().numpy(),
+        "J22_eig": torch.linalg.eigvalsh(J22).cpu().detach().numpy(),
+        "A": torch.linalg.eigvalsh(A).cpu().detach().numpy(),
+        "Q": torch.linalg.eigvalsh(Q).cpu().detach().numpy()
+    })
+
+    wandb.log({"eigenvalues": wandb.Table(dataframe=eigenvalue_dataframe)})
 
     """
     optimize local parameters
