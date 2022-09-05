@@ -10,7 +10,7 @@ from log import make_folder, save_dict
 from plot.gmm_plot import plot_loss
 from svae.lds import SVAE
 from vae import VAE, resVAE
-
+from hyperparams import SEED
 import wandb
 
 LATENT_DIM = 10
@@ -36,6 +36,7 @@ hyperparameters = {
         "render_sigma": 0.20,
         "v": 0.75,
     },
+    "seed": SEED
 }
 
 

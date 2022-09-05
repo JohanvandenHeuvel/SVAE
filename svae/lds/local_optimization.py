@@ -12,10 +12,11 @@ import wandb
 import random
 import numpy as np
 
+from hyperparams import SEED
 device = "cuda:0"
-torch.manual_seed(0)
-random.seed(0)
-np.random.seed(0)
+torch.manual_seed(SEED)
+random.seed(SEED)
+np.random.seed(SEED)
 
 
 def info_condition(J, h, J_obs, h_obs):

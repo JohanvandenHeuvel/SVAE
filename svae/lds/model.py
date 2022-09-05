@@ -25,9 +25,10 @@ from distributions import MatrixNormalInverseWishart, NormalInverseWishart, Gaus
 
 import wandb
 
-torch.manual_seed(0)
-random.seed(0)
-np.random.seed(0)
+from hyperparams import SEED
+torch.manual_seed(SEED)
+random.seed(SEED)
+np.random.seed(SEED)
 
 
 np.set_printoptions(
