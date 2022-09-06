@@ -8,32 +8,11 @@ from torch.distributions import MultivariateNormal
 from matrix_ops import pack_dense, unpack_dense
 from .distribution import ExpDistribution
 
-torch.manual_seed(0)
-random.seed(0)
-np.random.seed(0)
+from svae.lds.hyperparams import SEED
 
-
-def sample(loc, Sigma, n=1):
-    """
-
-    Parameters
-    ----------
-    loc:
-        location parameter
-    Sigma:
-        scale parameter
-    n:
-        number of parameters
-
-    If passing an array of loc and Sigma this function will be repeated for every element.
-
-    Returns
-    -------
-
-    """
-    if len(loc.shape) == 2:
-        return [multivariate_normal.rvs(l, S, size=n) for (l, S) in zip(loc, Sigma)]
-    return multivariate_normal.rvs(loc, Sigma, size=n)
+torch.manual_seed(SEED)
+random.seed(SEED)
+np.random.seed(SEED)
 
 
 def info_to_natural(J, h):
@@ -54,19 +33,6 @@ def info_to_standard(J, h):
     scale = J_inv
     loc = J_inv @ h
     return loc, scale
-
-
-def standard_to_natural(loc, scale):
-    scale_inv = torch.inverse(scale)
-    eta_1 = torch.bmm(scale_inv, loc[..., None]).squeeze(-1)
-    eta_2 = -1 / 2 * scale_inv
-
-
-def standard_to_info(loc, scale):
-    J = torch.inverse(scale)
-    # h = torch.solve(scale, loc)
-    h = J @ loc
-    return J, h
 
 
 class Gaussian(ExpDistribution):
@@ -141,17 +107,11 @@ class Gaussian(ExpDistribution):
             print(-2 * eta_2.cpu().detach().numpy())
             print(
                 sorted(
-                    torch.abs(torch.linalg.eigvalsh(-2 * eta_2))
-                    .cpu()
-                    .detach()
-                    .numpy(),
+                    torch.abs(torch.linalg.eigvalsh(-2 * eta_2)).cpu().detach().numpy(),
                     reverse=True,
                 )
             )
             raise ValueError("(natural) Scale matrix not pos eigs")
-
-        # wandb.log({"eta_2_eig": plot_list(torch.linalg.eigvalsh(-2 * eta_2).cpu().detach().numpy())})
-        # plt.close("all")
 
         # L = torch.linalg.cholesky(
         #     -2 * eta_2 + 1e-6 * torch.eye(len(eta_2), device=eta_2.device)
@@ -161,7 +121,6 @@ class Gaussian(ExpDistribution):
         scale = torch.cholesky_inverse(L)
         loc = scale @ eta_1
         # loc = torch.bmm(scale, eta_1[..., None]).squeeze()
-
         return loc, scale
 
     def rsample(self, n_samples=1):
@@ -176,10 +135,7 @@ class Gaussian(ExpDistribution):
             print(scale.cpu().detach().numpy())
             print(
                 sorted(
-                    torch.abs(torch.linalg.eigvalsh(scale))
-                    .cpu()
-                    .detach()
-                    .numpy(),
+                    torch.abs(torch.linalg.eigvalsh(scale)).cpu().detach().numpy(),
                     reverse=True,
                 )
             )

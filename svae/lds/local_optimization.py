@@ -13,11 +13,11 @@ from distributions.gaussian import (
     natural_to_info,
     standard_pair_params,
 )
-from hyperparams import SEED
 from matrix_ops import pack_dense, outer_product, symmetrize
 from plot.lds_plot import plot_list
 
-device = "cuda:0"
+from hyperparams import SEED
+
 torch.manual_seed(SEED)
 random.seed(SEED)
 np.random.seed(SEED)
@@ -26,10 +26,6 @@ np.random.seed(SEED)
 def info_condition(J, h, J_obs, h_obs):
     # if not torch.all(torch.linalg.eigvalsh(J) >= 0.0):
     #     raise ValueError(f"J not pd: {torch.linalg.eigvalsh(J)}")
-    # if not torch.all(torch.linalg.eigvalsh(J_obs) >= 0.0):
-    #     raise ValueError(f"J_obs not pd: {torch.linalg.eigvalsh(J_obs)}")
-    # if not torch.all(torch.linalg.eigvalsh(J + J_obs) >= 0.0):
-    #     raise ValueError(f"J + J_obs not pd: {torch.linalg.eigvalsh(J + J_obs)}")
     return J + J_obs, h + h_obs
 
 
@@ -46,23 +42,15 @@ def lognorm(J, h, full=False):
 
 
 def info_marginalize(J11, J12, J22, h, logZ):
-    # assert logZ < 0
     # J11_inv = torch.inverse(J11)
     # temp = J12.T @ J11_inv
     # temp = torch.linalg.solve(J11, J12)
-
     # J_pred = J22 - J12.T @ inv(J11) @ J12
     # J_pred = symmetrize(J22 - temp @ J12)
-    J_pred = symmetrize(J22 - J12.T @ torch.linalg.solve(J11, J12))
     # h_pred = h2 - J12.T @ inv(J11) @ h1
     # h_pred = -temp @ h
-    h_pred = -J12.T @ torch.linalg.solve(symmetrize(J11), h)
     # logZ_pred = logZ - 1/2 h1.T @ inv(J11) @ h1 + 1/2 log|J11| - n/2 log(2pi)
     # logZ_pred = logZ - lognorm(J11, h)
-    logZ_pred = (
-        0.5 * h @ torch.linalg.solve(J11, h) - 0.5 * torch.linalg.slogdet(J11)[1]
-    )
-
     ###################
     #     CHOL        #
     ###################
@@ -80,8 +68,12 @@ def info_marginalize(J11, J12, J22, h, logZ):
     #
     # logZ_pred = 0.5 * v.T @ v - torch.sum(torch.log(torch.diag(L)))
     #
+    J_pred = symmetrize(J22 - J12.T @ torch.linalg.solve(J11, J12))
+    h_pred = -J12.T @ torch.linalg.solve(symmetrize(J11), h)
+    logZ_pred = (
+        0.5 * h @ torch.linalg.solve(J11, h) - 0.5 * torch.linalg.slogdet(J11)[1]
+    )
     # assert torch.all(torch.linalg.eigvalsh(J_pred) >= 0.0)
-
     return J_pred, h_pred.squeeze(), logZ_pred.squeeze() + logZ
 
 
@@ -104,13 +96,7 @@ def info_kalman_filter(init_params, pair_params, observations):
         J, h, logZ = info_predict(J_cond, h_cond, J11, J12, J22, logZ_param)
         total_logZ += logZ.squeeze()
         forward_messages.append(((J_cond, h_cond), (J, h)))
-        # wandb.log({
-        #     "J_eig": torch.linalg.eigvalsh(J),
-        #     "J_obs_eig": torch.linalg.eigvalsh(J_obs),
-        # })
-
     total_logZ += lognorm(J, h)
-
     return forward_messages, total_logZ
 
 
@@ -145,7 +131,6 @@ def info_rst_smoothing(J, h, cond_msg, pred_msg, pair_params, loc_next):
     # E_xxT = scale + outer_product(loc, loc)
 
     stats = (loc, E_xxT, E_xnxT)
-
     return J_smooth, h_smooth, stats
 
 
@@ -163,7 +148,6 @@ def process_expected_stats(expected_stats):
         E_x, E_xxT, E_xnxT = a
         E_xn, E_xnxnT, _ = b
         return E_xxT, E_xnxT.T, E_xnxnT, torch.tensor([1.0], device=E_x.device)
-        # return E_xnxnT, E_xnxT.T, E_xxT, torch.tensor([1.0], device=E_x.device)
 
     def make_node_stats(a):
         E_x, E_xxT, _ = a
@@ -197,12 +181,10 @@ def info_kalman_smoothing(forward_messages, pair_params):
         J_smooth, h_smooth, stats = info_rst_smoothing(
             J_smooth, h_smooth, cond_msg, pred_msg, pair_params, loc_next
         )
-        # wandb.log({"J_smooth_eig": torch.linalg.eigvalsh(J_smooth)})
         backward_messages.append((J_smooth, h_smooth))
         expected_stats.append(stats)
 
     expected_stats = process_expected_stats(list(reversed(expected_stats)))
-
     return list(reversed(backward_messages)), expected_stats
 
 
@@ -216,7 +198,6 @@ def info_sample_backward(forward_messages, pair_params, n_samples):
         J, h = condition(J_cond, h_cond, next_sample, J11, J12)
         # Sample from multiple Gaussians using as mean [h_0, ..., h_i, ...]
         # and block matrix with J on the diagonal as variance.
-        # wandb.log({"J_samplebackward_eig": torch.linalg.eigvalsh(J)})
         _J = torch.kron(torch.eye(len(h), device=J.device), J.contiguous())
         _h = h.flatten()
         next_sample = (
@@ -247,24 +228,6 @@ def info_pair_params(A, Q):
     return J11, J12, J22
 
 
-def sample_forward_messages(messages):
-    samples = []
-    for _, (J, h) in messages:
-        loc, scale = info_to_standard(J, h)
-        x = loc + scale @ torch.randn(1, device=device)
-        samples.append(x.cpu().detach().numpy())
-    return samples
-
-
-def sample_backward_messages(messages):
-    samples = []
-    for (J, h) in messages:
-        loc, scale = info_to_standard(J, h)
-        x = loc + scale @ torch.randn(1, device=device)
-        samples.append(x.cpu().detach().numpy())
-    return samples
-
-
 def local_optimization(potentials, eta_theta, n_samples=1):
     y = list(zip(*natural_to_info(potentials)))
 
@@ -278,33 +241,28 @@ def local_optimization(potentials, eta_theta, n_samples=1):
     J12 = -1 * J12
     J22 = -2 * J22
 
-    """
-    optimize local parameters
-    """
     local_natparam = NormalInverseWishart(niw_param).expected_stats()
     init_param = natural_to_info(local_natparam), torch.sum(local_natparam[2:])
 
+    """
+    optimize local parameters
+    """
     forward_messages, logZ = info_kalman_filter(
         init_params=init_param, pair_params=(J11, J12, J22, logZ), observations=y
     )
-    backward_messages, expected_stats = info_kalman_smoothing(
+    _, expected_stats = info_kalman_smoothing(
         forward_messages, pair_params=(J11, J12, J22)
     )
-
     samples = info_sample_backward(
         forward_messages, pair_params=(J11, J12, J22), n_samples=n_samples
     )
 
     E_init_stats, E_pair_stats, E_node_stats = expected_stats
-    local_kld = (
-        torch.tensordot(
-            potentials, pack_dense(E_node_stats[0], E_node_stats[1]), dims=3
-        )
-        - logZ
-    )
+
+    E_node_stats = pack_dense(E_node_stats[0], E_node_stats[1])
+    local_kld = torch.tensordot(potentials, E_node_stats, dims=3) - logZ
 
     A, Q = standard_pair_params(J11, J12, J22)
-
     wandb.log(
         {
             "J11": J11,

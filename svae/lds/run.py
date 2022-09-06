@@ -55,8 +55,6 @@ def data_params():
 
 
 def get_data():
-    # A, Q, C, R = data_params()
-    # data = make_lds_data(A, Q, C, R, T=900)
     data = make_dot_data(**hyperparameters["data_parameters"])
     return data
 
@@ -67,13 +65,15 @@ def get_network():
 
 
 def main():
+    # logging
+    folder_name = make_folder()
     wandb.init(project="SVAE-test", config=hyperparameters)
 
-    folder_name = make_folder()
-
+    # get data and vae model
     observations = get_data()
     network = get_network()
 
+    # SVAE model
     model = SVAE(network, save_path=os.path.join(folder_name, "svae"))
     model.fit(observations, **hyperparameters["SVAE_train_parameters"])
 

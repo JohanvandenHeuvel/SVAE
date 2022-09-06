@@ -225,13 +225,8 @@ class SVAE:
             data = obs.clone().detach()
         data = data.to(self.vae.device).double()
         dataloader = torch.utils.data.DataLoader(
-            WindowData(data, batch_size),
-            batch_size=1, shuffle=True
+            WindowData(data, batch_size), batch_size=1, shuffle=True
         )
-        # dataloader = torch.utils.data.DataLoader(
-        #     data,
-        #     batch_size=batch_size, shuffle=True
-        # )
         num_batches = len(dataloader)
 
         """
@@ -259,18 +254,9 @@ class SVAE:
         self.save_and_log(data, "pre", (niw_param, mniw_param))
         train_loss = []
         for epoch in range(epochs + 1):
-
-            # print(f"> EPOCH {epoch} =====")
-
             total_loss = []
             for i, y in enumerate(dataloader):
-
-                if i >= len(dataloader) - 1:
-                    continue
-
                 y = y.squeeze(0)
-
-                # print(f">> ITER {i} =====")
                 potentials = self.encode(y)
 
                 # remove dependency on previous iterations
@@ -326,14 +312,6 @@ class SVAE:
                     }
                 )
 
-                # print(nat_grad_pair[0].cpu().detach().numpy())
-                # print()
-                # print(nat_grad_pair[1].cpu().detach().numpy())
-                # print()
-                # print(nat_grad_pair[2].cpu().detach().numpy())
-                # print()
-                # print(nat_grad_pair[3])
-
                 """
                 Update encoder/decoder parameters using automatic differentiation
                 """
@@ -355,9 +333,13 @@ class SVAE:
                 global_kld = global_kld / len(data)
 
                 kld_loss = global_kld + local_kld
-
                 loss = recon_loss + kld_weight * kld_loss
-                # print(f"{global_kld:.3f} \t {local_kld.item():.3f} \t {recon_loss:.3f}")
+
+                optimizer.zero_grad()
+                # compute gradients
+                loss.backward()
+                # update parameters
+                optimizer.step()
 
                 wandb.log(
                     {
@@ -367,12 +349,6 @@ class SVAE:
                     }
                 )
 
-                optimizer.zero_grad()
-                # compute gradients
-                loss.backward()
-                # update parameters
-                optimizer.step()
-
                 total_loss.append(
                     (
                         recon_loss.item(),
@@ -380,12 +356,9 @@ class SVAE:
                         kld_weight * global_kld.item(),
                     )
                 )
-
             train_loss.append(np.mean(total_loss, axis=0))
-            print(
-                f"[{epoch}/{epochs + 1}]; {train_loss[-1].sum()}; (recon, local, global); {train_loss[-1]})"
-            )
 
+            print(f"[{epoch}/{epochs + 1}] {train_loss[-1].sum()}")
             if epoch % max((epochs // 20), 1) == 0 or True:
                 self.save_and_log(data, epoch, (niw_param, mniw_param))
 
