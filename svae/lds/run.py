@@ -1,15 +1,15 @@
 import os
 import sys
+
 import torch
 
 # add project root to PYTHONPATH
 sys.path.append(os.path.join(os.getcwd(), "SVAE"))
 
-from data import make_lds_data, make_dot_data
+from data import make_dot_data
 from log import make_folder, save_dict
-from plot.gmm_plot import plot_loss
 from svae.lds import SVAE
-from vae import VAE, resVAE
+from vae import VAE
 from hyperparams import SEED
 import wandb
 
@@ -36,7 +36,7 @@ hyperparameters = {
         "render_sigma": 0.20,
         "v": 0.75,
     },
-    "seed": SEED
+    "seed": SEED,
 }
 
 
@@ -68,7 +68,7 @@ def get_network():
 
 def main():
     # wandb.config = hyperparameters
-    wandb.init(project="SVAE", config=hyperparameters)
+    wandb.init(project="SVAE_test", config=hyperparameters)
 
     folder_name = make_folder()
     save_dict(hyperparameters, save_path=folder_name, name="hyperparameters")

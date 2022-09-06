@@ -1,19 +1,20 @@
+import random
+
+import numpy as np
 import torch
-import pandas as pd
+import wandb
 
 from distributions import MatrixNormalInverseWishart, NormalInverseWishart
-from matrix_ops import pack_dense, outer_product, is_posdef, unpack_dense, symmetrize
 from distributions.gaussian import (
     info_to_standard,
     Gaussian,
     info_to_natural,
-    natural_to_info,
+    natural_to_info, standard_pair_params,
 )
-import wandb
-import random
-import numpy as np
-
 from hyperparams import SEED
+from matrix_ops import pack_dense, outer_product, symmetrize
+from plot.lds_plot import plot_list
+
 device = "cuda:0"
 torch.manual_seed(SEED)
 random.seed(SEED)
@@ -57,7 +58,7 @@ def info_marginalize(J11, J12, J22, h, logZ):
     # logZ_pred = logZ - 1/2 h1.T @ inv(J11) @ h1 + 1/2 log|J11| - n/2 log(2pi)
     # logZ_pred = logZ - lognorm(J11, h)
     logZ_pred = (
-        0.5 * h @ torch.linalg.solve(J11, h) - 0.5 * torch.linalg.slogdet(J11)[1]
+            0.5 * h @ torch.linalg.solve(J11, h) - 0.5 * torch.linalg.slogdet(J11)[1]
     )
 
     ###################
@@ -244,12 +245,6 @@ def info_pair_params(A, Q):
     return J11, J12, J22
 
 
-def standard_pair_params(J11, J12, J22):
-    Q = torch.inverse(J22)
-    A = -(J12 @ Q).T
-    return A, Q
-
-
 def sample_forward_messages(messages):
     samples = []
     for _, (J, h) in messages:
@@ -281,19 +276,6 @@ def local_optimization(potentials, eta_theta, n_samples=1):
     J12 = -1 * J12
     J22 = -2 * J22
 
-    A, Q = standard_pair_params(J11, J12, J22)
-    wandb.log({"J11": J11, "J12": J12, "J22": J22, "A": A, "Q": Q})
-
-    eigenvalue_dataframe = pd.DataFrame.from_dict({
-        "J11_eig": torch.linalg.eigvalsh(J11).cpu().detach().numpy(),
-        "J12_eig": torch.linalg.eigvalsh(J12).cpu().detach().numpy(),
-        "J22_eig": torch.linalg.eigvalsh(J22).cpu().detach().numpy(),
-        "A": torch.linalg.eigvalsh(A).cpu().detach().numpy(),
-        "Q": torch.linalg.eigvalsh(Q).cpu().detach().numpy()
-    })
-
-    wandb.log({"eigenvalues": wandb.Table(dataframe=eigenvalue_dataframe)})
-
     """
     optimize local parameters
     """
@@ -313,10 +295,33 @@ def local_optimization(potentials, eta_theta, n_samples=1):
 
     E_init_stats, E_pair_stats, E_node_stats = expected_stats
     local_kld = (
-        torch.tensordot(
-            potentials, pack_dense(E_node_stats[0], E_node_stats[1]), dims=3
-        )
-        - logZ
+            torch.tensordot(
+                potentials, pack_dense(E_node_stats[0], E_node_stats[1]), dims=3
+            )
+            - logZ
     )
+
+    A, Q = standard_pair_params(J11, J12, J22)
+
+    print(torch.linalg.eigvalsh(J12).cpu().detach().numpy())
+
+    wandb.log({
+        "J11": J11,
+        "J12": J12,
+        "J22": J22,
+        "A": A,
+        "Q": Q,
+        "J11_eig": plot_list(
+            torch.linalg.eigvalsh(J11).cpu().detach().numpy()
+        ),
+        "J12_eig": plot_list(
+            torch.linalg.eigvalsh(J12).cpu().detach().numpy()
+        ),
+        "J22_eig": plot_list(
+            torch.linalg.eigvalsh(J22).cpu().detach().numpy()
+        ),
+        "A_eig": plot_list(torch.linalg.eigvalsh(A).cpu().detach().numpy()),
+        "Q_eig": plot_list(torch.linalg.eigvalsh(Q).cpu().detach().numpy()),
+    })
 
     return samples, (E_init_stats, E_pair_stats), local_kld

@@ -1,31 +1,28 @@
 import os
+import random
 
 import numpy as np
-import random
 import torch
+import wandb
 from matplotlib import pyplot as plt
 from torch.utils.data import DataLoader
 
-from distributions.gaussian import natural_to_info
+from distributions import MatrixNormalInverseWishart, NormalInverseWishart
+from hyperparams import SEED
 from matrix_ops import pack_dense, unpack_dense
 from plot.lds_plot import (
-    plot_observations,
     plot,
     plot_latents,
-    plot_parameters,
     plot_info_parameters,
     plot_potentials,
+    plot_list,
 )
 from svae.gradient import natural_gradient, SGDOptim
 from svae.lds.global_optimization import initialize_global_lds_parameters, prior_kld_lds
-from svae.lds.local_optimization import local_optimization, standard_pair_params
+from svae.lds.local_optimization import local_optimization
+from distributions.gaussian import standard_pair_params
 from vae import VAE
 
-from distributions import MatrixNormalInverseWishart, NormalInverseWishart, Gaussian
-
-import wandb
-
-from hyperparams import SEED
 torch.manual_seed(SEED)
 random.seed(SEED)
 np.random.seed(SEED)
@@ -139,11 +136,9 @@ class SVAE:
             self.save_model(epoch)
 
             J11, J12, J22, _ = MatrixNormalInverseWishart(mniw_param).expected_stats()
-            # A, Q = standard_pair_params(-2 * J11, -1 * J12, -2 * J22)
-            Sigma, mu, _, _ = unpack_dense(
-                NormalInverseWishart(niw_param).expected_stats()
-            )
-            # print(sorted(torch.abs(torch.linalg.eigvalsh(A)).cpu().detach().numpy(), reverse=True))
+            J11 = -2 * J11
+            J12 = -1 * J12
+            J22 = -2 * J22
 
             # only use a subset of the data for plotting
             data = data[:200]
@@ -164,15 +159,11 @@ class SVAE:
                 save_path=self.save_path,
             )
 
-            # fig_params = plot_parameters(
-            #     A, Q, Sigma, mu, title=f"{epoch}_params", save_path=self.save_path
-            # )
-
             fig_info_params = plot_info_parameters(
-                -1 * J11,
-                -2 * J12,
-                -2 * J22,
-                -2 * J12.T,
+                J11,
+                J12,
+                J22,
+                J12.T,
                 title=f"{epoch}_info_params",
                 save_path=self.save_path,
             )
@@ -195,7 +186,6 @@ class SVAE:
             wandb.log(
                 {
                     "potentials": fig_potentials,
-                    # "params": fig_params,
                     "info_params": fig_info_params,
                     "obs": fig_obs,
                     "latents": fig_latents,

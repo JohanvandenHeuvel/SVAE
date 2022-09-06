@@ -5,7 +5,14 @@ import numpy as np
 import torch.linalg
 
 from matrix_ops import unpack_dense
-from svae.lds.local_optimization import standard_pair_params
+from distributions.gaussian import standard_pair_params
+
+
+def plot_list(l):
+    x = np.arange(0, 10)
+    fig, ax = plt.subplots()
+    ax.bar(x, l)
+    return fig
 
 
 def plot_observations(obs, samples, variance, title="plot", save_path=None):
@@ -17,7 +24,10 @@ def plot_observations(obs, samples, variance, title="plot", save_path=None):
         ax = axs[n]
         ax.plot(obs[:, n], label="observed", alpha=0.8)
         ax.plot(
-            samples[:, n], linestyle="dashed", label="sampled", alpha=0.8,
+            samples[:, n],
+            linestyle="dashed",
+            label="sampled",
+            alpha=0.8,
         )
         ax.fill_between(
             x, obs[:, n] - variance[:, n], obs[:, n] + variance[:, n], alpha=0.1
@@ -101,7 +111,11 @@ def plot_latents(latents, prefix, title=None, save_path=None):
 
 
 def plot(
-    obs, samples, prefix=25, title=None, save_path=None,
+    obs,
+    samples,
+    prefix=25,
+    title=None,
+    save_path=None,
 ):
     """
 

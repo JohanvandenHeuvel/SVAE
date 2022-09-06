@@ -3,7 +3,7 @@ from scipy.stats import multivariate_normal
 import random
 import numpy as np
 
-from matrix_ops import pack_dense, unpack_dense, is_posdef
+from matrix_ops import pack_dense, unpack_dense
 from .distribution import ExpDistribution
 from torch.distributions import MultivariateNormal
 
@@ -142,9 +142,7 @@ class Gaussian(ExpDistribution):
         # L = torch.linalg.cholesky(
         #     -2 * eta_2 + 1e-6 * torch.eye(len(eta_2), device=eta_2.device)
         # )
-        L = torch.linalg.cholesky(
-            -2 * eta_2
-        )
+        L = torch.linalg.cholesky(-2 * eta_2)
         # scale = -1 / 2 * torch.inverse(eta_2)
         scale = torch.cholesky_inverse(L)
         loc = torch.bmm(scale, eta_1[..., None]).squeeze()
@@ -177,3 +175,9 @@ class Gaussian(ExpDistribution):
             raise ValueError("Scale matrix not pos eigs")
 
         return MultivariateNormal(loc, scale.squeeze()).rsample([n_samples])
+
+
+def standard_pair_params(J11, J12, J22):
+    Q = torch.inverse(J22)
+    A = -(J12 @ Q).T
+    return A, Q
