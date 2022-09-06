@@ -68,7 +68,7 @@ def get_network():
 
 def main():
     # wandb.config = hyperparameters
-    wandb.init(project="SVAE_test", config=hyperparameters)
+    wandb.init(project="SVAE", config=hyperparameters)
 
     folder_name = make_folder()
     save_dict(hyperparameters, save_path=folder_name, name="hyperparameters")
