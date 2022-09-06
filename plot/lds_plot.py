@@ -5,11 +5,10 @@ import numpy as np
 import torch.linalg
 
 from matrix_ops import unpack_dense
-from distributions.gaussian import standard_pair_params
 
 
 def plot_list(l):
-    x = np.arange(0, 10)
+    x = np.arange(0, len(l))
     fig, ax = plt.subplots()
     ax.bar(x, l)
     return fig
@@ -188,10 +187,8 @@ def plot_parameters(A, Q, Sigma, mu, title=None, save_path=None):
     return fig
 
 
-def plot_info_parameters(J11, J12, J22, J21, title=None, save_path=None):
+def plot_info_parameters(J11, J12, J22, J21, A, Q, title=None, save_path=None):
     fig, axs = plt.subplots(2, 3)
-
-    A, Q = standard_pair_params(J11, J12, J22)
 
     cmap = "coolwarm"
     im_J11 = axs[0, 0].matshow(J11.cpu().detach().numpy(), cmap=cmap)

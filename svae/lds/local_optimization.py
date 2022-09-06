@@ -3,13 +3,15 @@ import random
 import numpy as np
 import torch
 import wandb
+from matplotlib import pyplot as plt
 
 from distributions import MatrixNormalInverseWishart, NormalInverseWishart
 from distributions.gaussian import (
     info_to_standard,
     Gaussian,
     info_to_natural,
-    natural_to_info, standard_pair_params,
+    natural_to_info,
+    standard_pair_params,
 )
 from hyperparams import SEED
 from matrix_ops import pack_dense, outer_product, symmetrize
@@ -58,7 +60,7 @@ def info_marginalize(J11, J12, J22, h, logZ):
     # logZ_pred = logZ - 1/2 h1.T @ inv(J11) @ h1 + 1/2 log|J11| - n/2 log(2pi)
     # logZ_pred = logZ - lognorm(J11, h)
     logZ_pred = (
-            0.5 * h @ torch.linalg.solve(J11, h) - 0.5 * torch.linalg.slogdet(J11)[1]
+        0.5 * h @ torch.linalg.solve(J11, h) - 0.5 * torch.linalg.slogdet(J11)[1]
     )
 
     ###################
@@ -295,33 +297,28 @@ def local_optimization(potentials, eta_theta, n_samples=1):
 
     E_init_stats, E_pair_stats, E_node_stats = expected_stats
     local_kld = (
-            torch.tensordot(
-                potentials, pack_dense(E_node_stats[0], E_node_stats[1]), dims=3
-            )
-            - logZ
+        torch.tensordot(
+            potentials, pack_dense(E_node_stats[0], E_node_stats[1]), dims=3
+        )
+        - logZ
     )
 
     A, Q = standard_pair_params(J11, J12, J22)
 
-    print(torch.linalg.eigvalsh(J12).cpu().detach().numpy())
-
-    wandb.log({
-        "J11": J11,
-        "J12": J12,
-        "J22": J22,
-        "A": A,
-        "Q": Q,
-        "J11_eig": plot_list(
-            torch.linalg.eigvalsh(J11).cpu().detach().numpy()
-        ),
-        "J12_eig": plot_list(
-            torch.linalg.eigvalsh(J12).cpu().detach().numpy()
-        ),
-        "J22_eig": plot_list(
-            torch.linalg.eigvalsh(J22).cpu().detach().numpy()
-        ),
-        "A_eig": plot_list(torch.linalg.eigvalsh(A).cpu().detach().numpy()),
-        "Q_eig": plot_list(torch.linalg.eigvalsh(Q).cpu().detach().numpy()),
-    })
+    wandb.log(
+        {
+            "J11": J11,
+            "J12": J12,
+            "J22": J22,
+            "A": A,
+            "Q": Q,
+            "J11_eig": plot_list(torch.linalg.eigvalsh(J11).cpu().detach().numpy()),
+            "J12_eig": plot_list(torch.linalg.eigvalsh(J12).cpu().detach().numpy()),
+            "J22_eig": plot_list(torch.linalg.eigvalsh(J22).cpu().detach().numpy()),
+            "A_eig": plot_list(torch.linalg.eigvalsh(A).cpu().detach().numpy()),
+            "Q_eig": plot_list(torch.linalg.eigvalsh(Q).cpu().detach().numpy()),
+        }
+    )
+    plt.close("all")
 
     return samples, (E_init_stats, E_pair_stats), local_kld

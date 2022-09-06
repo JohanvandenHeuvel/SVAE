@@ -3,6 +3,22 @@ import numpy.random as npr
 import matplotlib.pyplot as plt
 from scipy.signal import sawtooth
 import torch
+from torch.utils.data import Dataset
+
+
+class WindowData(Dataset):
+    def __init__(self, data, window_length):
+        n_windows = len(data) % window_length
+        windows = [
+            (i * window_length, (i + 1) * window_length) for i in range(n_windows)
+        ]
+        self.data = [data[window[0] : window[1]] for window in windows]
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, item):
+        return self.data[item]
 
 
 def make_lds_data(A, Q, C, R, T):

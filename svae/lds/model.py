@@ -1,6 +1,7 @@
 import os
 import random
 
+from data import WindowData
 import numpy as np
 import torch
 import wandb
@@ -15,7 +16,6 @@ from plot.lds_plot import (
     plot_latents,
     plot_info_parameters,
     plot_potentials,
-    plot_list,
 )
 from svae.gradient import natural_gradient, SGDOptim
 from svae.lds.global_optimization import initialize_global_lds_parameters, prior_kld_lds
@@ -139,6 +139,7 @@ class SVAE:
             J11 = -2 * J11
             J12 = -1 * J12
             J22 = -2 * J22
+            A, Q = standard_pair_params(J11, J12, J22)
 
             # only use a subset of the data for plotting
             data = data[:200]
@@ -164,6 +165,8 @@ class SVAE:
                 J12,
                 J22,
                 J12.T,
+                A,
+                Q,
                 title=f"{epoch}_info_params",
                 save_path=self.save_path,
             )
@@ -222,8 +225,13 @@ class SVAE:
             data = obs.clone().detach()
         data = data.to(self.vae.device).double()
         dataloader = torch.utils.data.DataLoader(
-            data, batch_size=batch_size, shuffle=False
+            WindowData(data, batch_size),
+            batch_size=1, shuffle=True
         )
+        # dataloader = torch.utils.data.DataLoader(
+        #     data,
+        #     batch_size=batch_size, shuffle=True
+        # )
         num_batches = len(dataloader)
 
         """
@@ -259,6 +267,8 @@ class SVAE:
 
                 if i >= len(dataloader) - 1:
                     continue
+
+                y = y.squeeze(0)
 
                 # print(f">> ITER {i} =====")
                 potentials = self.encode(y)
