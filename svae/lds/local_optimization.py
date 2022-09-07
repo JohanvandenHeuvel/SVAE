@@ -2,8 +2,6 @@ import random
 
 import numpy as np
 import torch
-import wandb
-from matplotlib import pyplot as plt
 
 from distributions import MatrixNormalInverseWishart, NormalInverseWishart
 from distributions.gaussian import (
@@ -11,12 +9,9 @@ from distributions.gaussian import (
     Gaussian,
     info_to_natural,
     natural_to_info,
-    standard_pair_params,
 )
-from matrix_ops import pack_dense, outer_product, symmetrize
-from plot.lds_plot import plot_list
-
 from hyperparams import SEED
+from matrix_ops import pack_dense, outer_product, symmetrize
 
 torch.manual_seed(SEED)
 random.seed(SEED)
@@ -261,22 +256,5 @@ def local_optimization(potentials, eta_theta, n_samples=1):
 
     E_node_stats = pack_dense(E_node_stats[0], E_node_stats[1])
     local_kld = torch.tensordot(potentials, E_node_stats, dims=3) - logZ
-
-    A, Q = standard_pair_params(J11, J12, J22)
-    wandb.log(
-        {
-            "J11": J11,
-            "J12": J12,
-            "J22": J22,
-            "A": A,
-            "Q": Q,
-            "J11_eig": plot_list(torch.linalg.eigvalsh(J11).cpu().detach().numpy()),
-            "J12_eig": plot_list(torch.linalg.eigvalsh(J12).cpu().detach().numpy()),
-            "J22_eig": plot_list(torch.linalg.eigvalsh(J22).cpu().detach().numpy()),
-            "A_eig": plot_list(torch.linalg.eigvalsh(A).cpu().detach().numpy()),
-            "Q_eig": plot_list(torch.linalg.eigvalsh(Q).cpu().detach().numpy()),
-        }
-    )
-    plt.close("all")
 
     return samples, (E_init_stats, E_pair_stats), local_kld

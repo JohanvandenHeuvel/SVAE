@@ -15,7 +15,7 @@ from plot.lds_plot import (
     plot,
     plot_latents,
     plot_info_parameters,
-    plot_potentials,
+    plot_potentials, plot_list,
 )
 from svae.gradient import natural_gradient, SGDOptim
 from svae.lds.global_optimization import initialize_global_lds_parameters, prior_kld_lds
@@ -139,7 +139,23 @@ class SVAE:
             J11 = -2 * J11
             J12 = -1 * J12
             J22 = -2 * J22
+
             A, Q = standard_pair_params(J11, J12, J22)
+            wandb.log(
+                {
+                    "J11": J11,
+                    "J12": J12,
+                    "J22": J22,
+                    "A": A,
+                    "Q": Q,
+                    "J11_eig": plot_list(torch.linalg.eigvals(J11).cpu().detach().numpy()),
+                    "J12_eig": plot_list(torch.linalg.eigvals(J12).cpu().detach().numpy()),
+                    "J22_eig": plot_list(torch.linalg.eigvals(J22).cpu().detach().numpy()),
+                    "A_eig": plot_list(torch.linalg.eigvals(A).cpu().detach().numpy()),
+                    "Q_eig": plot_list(torch.linalg.eigvals(Q).cpu().detach().numpy()),
+                }
+            )
+            plt.close("all")
 
             # only use a subset of the data for plotting
             data = data[:200]
