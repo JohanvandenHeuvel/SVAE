@@ -100,30 +100,31 @@ def info_rst_smoothing(J, h, cond_msg, pred_msg, pair_params, loc_next):
     J_pred, h_pred = pred_msg
     J11, J12, J22 = pair_params
 
-    temp = J12 @ torch.inverse(J - J_pred + J22)
-    J_smooth = J_cond + J11 - temp @ J12.T
-    h_smooth = h_cond - temp @ (h - h_pred)
-
-    loc, scale = info_to_standard(J_smooth, h_smooth)
-    E_xnxT = -temp @ scale + outer_product(loc_next, loc)
-    E_xxT = scale + outer_product(loc, loc)
-
-    # L = torch.linalg.cholesky(J - J_pred + J22)
-    # temp = torch.linalg.solve_triangular(L, J12.T, upper=False)
-    # J_smooth = (J_cond + J11) - temp.T @ temp
-    # h_smooth = (
-    #     h_cond
-    #     - temp.T
-    #     @ torch.linalg.solve_triangular(
-    #         L, (h - h_pred)[..., None], upper=False
-    #     ).squeeze()
-    # )
+    # temp = J12 @ torch.inverse(J - J_pred + J22)
+    # J_smooth = J_cond + J11 - temp @ J12.T
+    # h_smooth = h_cond - temp @ (h - h_pred)
     #
     # loc, scale = info_to_standard(J_smooth, h_smooth)
-    # E_xnxT = -torch.linalg.solve_triangular(
-    #     L.T, torch.linalg.solve_triangular(L, J12.T @ scale, upper=False), upper=False
-    # ) + outer_product(loc_next, loc)
+    # E_xnxT = -temp @ scale + outer_product(loc_next, loc)
     # E_xxT = scale + outer_product(loc, loc)
+
+    L = torch.linalg.cholesky(J - J_pred + J22, upper=False)
+    # LT = torch.linalg.cholesky(J - J_pred + J22, upper=True)
+    temp = torch.linalg.solve_triangular(L, J12.T, upper=False)
+    J_smooth = (J_cond + J11) - temp.T @ temp
+    h_smooth = (
+        h_cond
+        - temp.T
+        @ torch.linalg.solve_triangular(
+            L, (h - h_pred)[..., None], upper=False
+        ).squeeze()
+    )
+
+    loc, scale = info_to_standard(J_smooth, h_smooth)
+    E_xnxT = -torch.linalg.solve_triangular(
+        L.T, torch.linalg.solve_triangular(L, J12.T @ scale, upper=False), upper=True
+    ) + outer_product(loc_next, loc)
+    E_xxT = scale + outer_product(loc, loc)
 
     stats = (loc, E_xxT, E_xnxT)
     return J_smooth, h_smooth, stats
