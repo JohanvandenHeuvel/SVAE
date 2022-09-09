@@ -310,10 +310,10 @@ class SVAE:
                 nat_grad_pair = natural_gradient(
                     E_pair_stats, mniw_param, mniw_prior, len(data), num_batches
                 )
-                # mniw_param = [
-                #     mniw_optimizer[i].update(mniw_param[i], nat_grad_pair[i])
-                #     for i in range(len(nat_grad_pair))
-                # ]
+                mniw_param = [
+                    mniw_optimizer[i].update(mniw_param[i], nat_grad_pair[i])
+                    for i in range(len(nat_grad_pair))
+                ]
 
                 wandb.log(
                     {
