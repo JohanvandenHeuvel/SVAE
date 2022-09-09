@@ -109,9 +109,7 @@ class VAE(nn.Module):
         if self.recon_loss == "MSE":
             recon_loss = F.mse_loss(mu_x, x)
         elif self.recon_loss == "likelihood":
-            T, K, p = mu_x.shape
             recon_loss = F.gaussian_nll_loss(mu_x, x, log_var_x.exp(), full=full, reduction=reduction)
-            recon_loss = recon_loss / K
         return recon_loss
 
     def save_and_log(self, obs, epoch, save_path):
