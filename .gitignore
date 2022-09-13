@@ -282,3 +282,4 @@ results
 
 # saved model files
 *.pt
+*.pickle
