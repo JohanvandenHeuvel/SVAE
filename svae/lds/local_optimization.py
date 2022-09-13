@@ -40,7 +40,7 @@ def info_marginalize(A, B, C, h1, h2):
     # J = C - B @ inv(C) @ B.T
     J = symmetrize(C - B @ torch.linalg.solve(A, B.T))
     # h = h2 - B @ inv(C) @ h1
-    h = h2 - B.T @ torch.linalg.solve(symmetrize(A), h1)
+    h = h2 - B @ torch.linalg.solve(symmetrize(A), h1)
     return J, h.squeeze()
 
 
@@ -84,11 +84,6 @@ def info_rst_smoothing(J, h, cond_msg, pred_msg, pair_params, loc_next):
     E_xnxT = -torch.linalg.solve(J - J_pred + J22, J12.T) @ scale + outer_product(
         loc_next, loc
     )
-
-    # L = torch.linalg.cholesky(J - J_pred + J22, upper=False)
-    # E_xnxT = -torch.linalg.solve_triangular(
-    #     L.T, torch.linalg.solve_triangular(L, J12.T @ scale, upper=False), upper=True
-    # ) + outer_product(loc_next, loc)
     E_xxT = scale + outer_product(loc, loc)
 
     stats = (loc, E_xxT, E_xnxT)
