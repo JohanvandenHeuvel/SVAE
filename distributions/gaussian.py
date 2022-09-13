@@ -94,15 +94,12 @@ class Gaussian(ExpDistribution):
 
     def natural_to_standard(self):
         eta_2, eta_1, _, _ = unpack_dense(self.nat_param)
-        # eta_1 = eta_1.squeeze()
-        # eta_2 = eta_2.squeeze()
 
         L = torch.linalg.cholesky(-2 * eta_2)
         # scale = -1 / 2 * torch.inverse(eta_2)
         scale = torch.cholesky_inverse(L)
-        # loc = scale @ eta_1
-        loc = torch.bmm(scale, eta_1[..., None]).squeeze()
-        return loc, scale
+        loc = torch.bmm(scale, eta_1[..., None])
+        return loc.squeeze(), scale.squeeze()
 
     def rsample(self, n_samples=1):
         """get samples using the re-parameterization trick and natural parameters"""
