@@ -18,7 +18,7 @@ vae_parameters = {
 svae_parameters = {
     "K": 15,
     "batch_size": 50,
-    "epochs": 10,
+    "epochs": 1000,
     "kld_weight": 0.35,
 }
 
@@ -51,7 +51,7 @@ def get_network():
 def main():
     # logging
     folder_name = make_folder()
-    wandb.init(project="SVAE_gmm", config=hyperparameters)
+    wandb.init(project="SVAE_public", config=hyperparameters)
 
     # get data and vae model
     data = get_data()
