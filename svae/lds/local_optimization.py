@@ -37,37 +37,11 @@ def lognorm(J, h, full=False):
 
 
 def info_marginalize(J11, J12, J22, h, logZ):
-    # J11_inv = torch.inverse(J11)
-    # temp = J12.T @ J11_inv
-    # temp = torch.linalg.solve(J11, J12)
     # J_pred = J22 - J12.T @ inv(J11) @ J12
-    # J_pred = symmetrize(J22 - temp @ J12)
-    # h_pred = h2 - J12.T @ inv(J11) @ h1
-    # h_pred = -temp @ h
-    # logZ_pred = logZ - 1/2 h1.T @ inv(J11) @ h1 + 1/2 log|J11| - n/2 log(2pi)
-    # logZ_pred = logZ - lognorm(J11, h)
-    ###################
-    #     CHOL        #
-    ###################
-    # n = len(J11)
-    #
-    # L = torch.linalg.cholesky(J11)
-    # v = torch.linalg.solve_triangular(L, h[..., None], upper=False)
-    #
-    # # A = J12.T @ torch.linalg.inv(J11)
-    # # print(torch.max(torch.linalg.svdvals(A)))
-    #
-    # h_pred = -J12.T @ torch.linalg.solve_triangular(L.T, v, upper=False)
-    # temp = torch.linalg.solve_triangular(L, J12, upper=False)
-    # J_pred = J22 - temp.T @ temp
-    #
-    # logZ_pred = 0.5 * v.T @ v - torch.sum(torch.log(torch.diag(L)))
-    #
     J_pred = symmetrize(J22 - J12.T @ torch.linalg.solve(J11, J12))
+    # h_pred = h2 - J12.T @ inv(J11) @ h1
     h_pred = -J12.T @ torch.linalg.solve(symmetrize(J11), h)
-    logZ_pred = (
-        0.5 * h @ torch.linalg.solve(J11, h) - 0.5 * torch.linalg.slogdet(J11)[1]
-    )
+    logZ_pred = 0.5 * (h @ torch.linalg.solve(J11, h) - torch.linalg.slogdet(J11)[1])
     # assert torch.all(torch.linalg.eigvalsh(J_pred) >= 0.0)
     return J_pred, h_pred.squeeze(), logZ_pred.squeeze() + logZ
 
