@@ -124,7 +124,6 @@ class VAE(nn.Module):
             log_var_x.cpu().detach().numpy(),
             z.cpu().detach().numpy(),
             title=f"{epoch}_vae_recon",
-            save_path=save_path,
         )
 
     def save_model(self, path=None, affix=None):

@@ -2,8 +2,8 @@ import os
 
 import numpy as np
 import torch
+import wandb
 from torch.utils.data import DataLoader
-from tqdm import tqdm
 
 from distributions import Gaussian
 from matrix_ops import pack_dense, unpack_dense
@@ -28,24 +28,24 @@ class SVAE:
         if save_path is not None:
             os.mkdir(save_path)
 
-    def save_model(self):
+    def save_model(self, epoch):
         """save model to disk"""
         path = self.save_path
 
         # network
-        self.vae.save_model(path)
+        self.vae.save_model(path, epoch)
 
         # global parameters
-        torch.save(self.eta_theta, os.path.join(path, f"eta_theta.pt"))
+        torch.save(self.eta_theta, os.path.join(path, f"eta_theta_{epoch}.pt"))
 
-    def load_model(self, path):
+    def load_model(self, path, epoch):
         """load model from disk"""
 
         # network
-        self.vae.load_model(path)
+        self.vae.load_model(path, epoch)
 
         # global parameters
-        self.eta_theta = torch.load(os.path.join(path, f"eta_theta.pt"))
+        self.eta_theta = torch.load(os.path.join(path, f"eta_theta_{epoch}.pt"))
 
     def encode(self, y):
         mu, log_var = self.vae.encode(y)
@@ -66,6 +66,9 @@ class SVAE:
 
     def save_and_log(self, obs, epoch, eta_theta):
         with torch.no_grad():
+            self.eta_theta = eta_theta
+            self.save_model(epoch)
+
             data = torch.tensor(obs).to(self.vae.device).float()
             potentials = self.encode(data)
 
@@ -78,16 +81,17 @@ class SVAE:
             # get reconstructions
             mu_y, log_var_y = self.decode(x)
 
-            plot_reconstruction(
+            fig = plot_reconstruction(
                 obs=obs,
-                mu=mu_y.cpu().detach().numpy(),
-                log_var=log_var_y.cpu().detach().numpy(),
+                mu=mu_y.squeeze().cpu().detach().numpy(),
+                log_var=log_var_y.squeeze().cpu().detach().numpy(),
                 latent=Ex.cpu().detach().numpy(),
                 eta_theta=eta_theta,
                 classes=torch.argmax(label_stats, dim=-1).cpu().detach().numpy(),
                 title=f"epoch:{epoch}_svae",
-                save_path=self.save_path,
             )
+
+            wandb.log({"fig": fig})
 
     def fit(self, obs, epochs, batch_size, K, kld_weight):
         """
@@ -127,8 +131,8 @@ class SVAE:
         global_optmizer = SGDOptim(step_size=10)
 
         train_loss = []
-        # self.save_and_log(obs, "pre", save_path, eta_theta)
-        for epoch in tqdm(range(epochs + 1)):
+        self.save_and_log(obs, "pre", eta_theta)
+        for epoch in range(epochs + 1):
 
             total_loss = []
             for i, y in enumerate(dataloader):
@@ -180,15 +184,14 @@ class SVAE:
                 # update parameters
                 optimizer.step()
 
-                total_loss.append((recon_loss.item(), kld_weight * kld_loss))
+                wandb.log({"recon_loss": recon_loss, "kld": kld_weight * kld_loss})
+
+                total_loss.append((recon_loss.item(), kld_weight * kld_loss.item()))
             train_loss.append(np.mean(total_loss, axis=0))
 
+            print(f"[{epoch}/{epochs + 1}] {train_loss[-1].sum()}")
             if epoch % max((epochs // 10), 1) == 0:
                 self.save_and_log(obs, epoch, eta_theta)
 
-        self.save_and_log(obs, "end", eta_theta)
-
         print("Finished training of the SVAE")
-        self.eta_theta = eta_theta
-        self.save_model()
-        return train_loss
+        self.save_and_log(obs, "end", eta_theta)
