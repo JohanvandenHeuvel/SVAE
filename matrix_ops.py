@@ -1,6 +1,14 @@
 import torch
 
 
+def batch_diagonalize(A):
+    return torch.diag_embed(A, dim1=-2, dim2=-1)
+
+
+def batch_diagonal(A):
+    return torch.diagonal(A, dim1=-2, dim2=-1)
+
+
 def pack_dense(A, b, c=None, d=None):
     """
 
@@ -19,34 +27,26 @@ def pack_dense(A, b, c=None, d=None):
 
     Parameters
     ----------
-    A :
-        Scale matrix.
-    b :
-        loc vector.
-    c :
+    A:
+        matrix.
+    b:
+        vector.
+    c:
         scalar
-    d :
+    d:
         scalar
 
     Returns
     -------
     densely packed array
     """
-    # device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     device = A.device
 
     leading_dim = b.shape[:-1]
     last_dim = b.shape[-1]
 
-    if A.ndim == b.ndim:
-        """
-        Turns e.g. 
-        [a1, a2]
-        into
-        [a1, 0]
-        [0, a2] 
-        """
-        A = A[..., None] * torch.eye(last_dim, device=device)[None, ...]
+    if A.ndim == b.ndim:  # i.e. A is diagonal of diagonal matrix.
+        A = batch_diagonalize(A)
 
     # top rows where A and b go
     z1 = torch.zeros(leading_dim + (last_dim, 1), device=device)
@@ -105,13 +105,11 @@ def is_posdef(A):
 
     """
     if not torch.allclose(A, A.T, atol=1e-6):
-        return False
         raise ValueError(f"Matrix is not symmetric: \n {A.cpu().detach().numpy()}")
 
     eigenvalues = torch.linalg.eigvalsh(A)
     if not torch.all(eigenvalues >= 0.0):
-        return False
-        raise ValueError(f"Not all eigenvalues are symmetric: {eigenvalues}")
+        raise ValueError(f"Not all eigenvalues are positive: {eigenvalues}")
 
     return True
 
