@@ -17,10 +17,10 @@ from plot.lds_plot import (
     plot_info_parameters,
     plot_potentials, plot_list,
 )
+from seed import SEED
 from svae.gradient import natural_gradient, SGDOptim
 from vae import VAE
 from .global_optimization import initialize_global_lds_parameters, prior_kld_lds
-from .hyperparams import SEED
 from .local_optimization import local_optimization
 
 torch.manual_seed(SEED)

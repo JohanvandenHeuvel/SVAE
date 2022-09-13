@@ -2,13 +2,11 @@ import random
 
 import numpy as np
 import torch
-from scipy.stats import multivariate_normal
 from torch.distributions import MultivariateNormal
 
 from matrix_ops import pack_dense, unpack_dense
+from seed import SEED
 from .distribution import ExpDistribution
-
-from svae.lds.hyperparams import SEED
 
 torch.manual_seed(SEED)
 random.seed(SEED)

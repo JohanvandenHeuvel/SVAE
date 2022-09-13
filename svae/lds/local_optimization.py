@@ -7,8 +7,8 @@ from distributions import MatrixNormalInverseWishart, NormalInverseWishart
 from distributions.gaussian import (
     natural_to_info,
 )
-from hyperparams import SEED
 from matrix_ops import pack_dense
+from seed import SEED
 from svae.lds.kalman import info_kalman_filter, info_kalman_smoothing
 from svae.lds.kalman.sample import info_sample_backward
 

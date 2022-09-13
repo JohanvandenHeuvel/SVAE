@@ -7,9 +7,7 @@ def info_observation_params(obs, C, R):
     R_inv = torch.inverse(R)
     R_inv_C = R_inv @ C
 
-    # J_obs = C.T @ inv(R) @ C
     J_obs = C.T @ R_inv_C
-    # h_obs = (y - D @ u) @ inv(R) @ C
     h_obs = obs @ R_inv_C
 
     J_obs = J_obs.unsqueeze(0).repeat(len(obs), 1, 1)
@@ -24,7 +22,7 @@ def info_pair_params(A, Q):
 
 
 def info_marginalize(A, B, C, h1, h2):
-    # TODO make marginalize local?
+    # TODO make marginalize local? Might help with speed, e.g. using Cholesky.
     J = symmetrize(C - B @ torch.linalg.solve(A, B.T))
     h = h2 - B @ torch.linalg.solve(symmetrize(A), h1)
     return J, h.squeeze()
