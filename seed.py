@@ -1,1 +1,2 @@
-SEED = 9
+import random
+SEED = random.randint(0, 100)
