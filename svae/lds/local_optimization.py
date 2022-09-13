@@ -36,19 +36,20 @@ def lognorm(J, h, full=False):
     return 0.5 * (h @ torch.linalg.solve(J, h) - torch.slogdet(J)[1] + constant)
 
 
-def info_marginalize(J11, J12, J22, h, logZ):
-    # J_pred = J22 - J12.T @ inv(J11) @ J12
-    J_pred = symmetrize(J22 - J12.T @ torch.linalg.solve(J11, J12))
-    # h_pred = h2 - J12.T @ inv(J11) @ h1
-    h_pred = -J12.T @ torch.linalg.solve(symmetrize(J11), h)
-    logZ_pred = 0.5 * (h @ torch.linalg.solve(J11, h) - torch.linalg.slogdet(J11)[1])
-    # assert torch.all(torch.linalg.eigvalsh(J_pred) >= 0.0)
-    return J_pred, h_pred.squeeze(), logZ_pred.squeeze() + logZ
+def info_marginalize(A, B, C, h1, h2):
+    # J = C - B @ inv(C) @ B.T
+    J = symmetrize(C - B @ torch.linalg.solve(A, B.T))
+    # h = h2 - B @ inv(C) @ h1
+    h = h2 - B.T @ torch.linalg.solve(symmetrize(A), h1)
+    return J, h.squeeze()
 
 
 def info_predict(J, h, J11, J12, J22, logZ):
-    J_new = J + J11
-    return info_marginalize(J_new, J12, J22, h, logZ)
+    J_pred, h_pred = info_marginalize(A=(J + J11), B=J12.T, C=J22, h1=h, h2=0)
+    logZ_pred = 0.5 * (
+        h @ torch.linalg.solve((J + J11), h) - torch.linalg.slogdet((J + J11))[1]
+    )
+    return J_pred, h_pred, logZ_pred.squeeze() + logZ
 
 
 def info_kalman_filter(init_params, pair_params, observations):
@@ -74,30 +75,20 @@ def info_rst_smoothing(J, h, cond_msg, pred_msg, pair_params, loc_next):
     J_pred, h_pred = pred_msg
     J11, J12, J22 = pair_params
 
-    # temp = J12 @ torch.inverse(J - J_pred + J22)
-    # J_smooth = J_cond + J11 - temp @ J12.T
-    # h_smooth = h_cond - temp @ (h - h_pred)
-    #
-    # loc, scale = info_to_standard(J_smooth, h_smooth)
-    # E_xnxT = -temp @ scale + outer_product(loc_next, loc)
-    # E_xxT = scale + outer_product(loc, loc)
-
-    L = torch.linalg.cholesky(J - J_pred + J22, upper=False)
-    # LT = torch.linalg.cholesky(J - J_pred + J22, upper=True)
-    temp = torch.linalg.solve_triangular(L, J12.T, upper=False)
-    J_smooth = (J_cond + J11) - temp.T @ temp
-    h_smooth = (
-        h_cond
-        - temp.T
-        @ torch.linalg.solve_triangular(
-            L, (h - h_pred)[..., None], upper=False
-        ).squeeze()
+    J_smooth, h_smooth = info_marginalize(
+        A=(J - J_pred + J22), B=J12, C=(J_cond + J11), h1=h - h_pred, h2=h_cond
     )
 
     loc, scale = info_to_standard(J_smooth, h_smooth)
-    E_xnxT = -torch.linalg.solve_triangular(
-        L.T, torch.linalg.solve_triangular(L, J12.T @ scale, upper=False), upper=True
-    ) + outer_product(loc_next, loc)
+
+    E_xnxT = -torch.linalg.solve(J - J_pred + J22, J12.T) @ scale + outer_product(
+        loc_next, loc
+    )
+
+    # L = torch.linalg.cholesky(J - J_pred + J22, upper=False)
+    # E_xnxT = -torch.linalg.solve_triangular(
+    #     L.T, torch.linalg.solve_triangular(L, J12.T @ scale, upper=False), upper=True
+    # ) + outer_product(loc_next, loc)
     E_xxT = scale + outer_product(loc, loc)
 
     stats = (loc, E_xxT, E_xnxT)
