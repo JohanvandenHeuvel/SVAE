@@ -5,16 +5,16 @@ import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from matrix_ops import pack_dense, unpack_dense
 from distributions import Gaussian
+from matrix_ops import pack_dense, unpack_dense
 from plot.gmm_plot import plot_reconstruction
-from svae.gmm.local_optimization import local_optimization
-from svae.gmm.global_optimization import (
+from svae.gradient import natural_gradient, SGDOptim
+from vae import VAE
+from .global_optimization import (
     initialize_global_gmm_parameters,
     prior_kld_gmm,
 )
-from svae.gradient import natural_gradient, SGDOptim
-from vae import VAE
+from .local_optimization import local_optimization
 
 
 class SVAE:

@@ -10,8 +10,8 @@ from data import make_dot_data
 from log import make_folder
 from svae.lds import SVAE
 from vae import VAE
-from hyperparams import SEED
 import wandb
+from .hyperparams import SEED
 
 LATENT_DIM = 10
 

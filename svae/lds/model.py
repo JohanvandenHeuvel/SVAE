@@ -1,15 +1,15 @@
 import os
 import random
 
-from data import WindowData
 import numpy as np
 import torch
 import wandb
 from matplotlib import pyplot as plt
 from torch.utils.data import DataLoader
 
-from distributions import MatrixNormalInverseWishart, NormalInverseWishart
-from hyperparams import SEED
+from data import WindowData
+from distributions import MatrixNormalInverseWishart
+from distributions.gaussian import standard_pair_params
 from matrix_ops import pack_dense, unpack_dense
 from plot.lds_plot import (
     plot,
@@ -18,10 +18,10 @@ from plot.lds_plot import (
     plot_potentials, plot_list,
 )
 from svae.gradient import natural_gradient, SGDOptim
-from svae.lds.global_optimization import initialize_global_lds_parameters, prior_kld_lds
-from svae.lds.local_optimization import local_optimization
-from distributions.gaussian import standard_pair_params
 from vae import VAE
+from .global_optimization import initialize_global_lds_parameters, prior_kld_lds
+from .hyperparams import SEED
+from .local_optimization import local_optimization
 
 torch.manual_seed(SEED)
 random.seed(SEED)
