@@ -26,7 +26,7 @@ vae_parameters = {
 
 svae_parameters = {
     "batch_size": 80,
-    "epochs": 1,
+    "epochs": 1000,
     "kld_weight": 1.0,
     "latent_dim": vae_parameters["latent_dim"],
 }
@@ -52,7 +52,7 @@ def get_network():
 def main():
     # logging
     folder_name = make_folder()
-    wandb.init(project="SVAE", config=hyperparameters, mode="disabled")
+    wandb.init(project="SVAE", config=hyperparameters)
 
     # get data and vae model
     observations = get_data()
