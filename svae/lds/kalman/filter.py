@@ -1,6 +1,6 @@
 import torch
 
-from info_ops import info_marginalize
+from .info_ops import info_marginalize
 
 
 def lognorm(J, h, full=False):

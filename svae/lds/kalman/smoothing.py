@@ -2,7 +2,7 @@ import torch
 
 from distributions.gaussian import info_to_standard
 from matrix_ops import outer_product
-from info_ops import info_marginalize
+from .info_ops import info_marginalize
 
 
 def info_rst_smoothing(J, h, cond_msg, pred_msg, pair_params, loc_next):
