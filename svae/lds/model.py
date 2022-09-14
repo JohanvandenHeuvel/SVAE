@@ -213,7 +213,7 @@ class SVAE:
 
             plt.close("all")
 
-    def fit(self, obs, epochs, batch_size, latent_dim, kld_weight):
+    def fit(self, obs, epochs, batch_size, latent_dim, local_kld_weight, global_kld_weight):
         """
         Find the optimum for global variational parameter eta_theta, and encoder/decoder parameters.
 
@@ -345,11 +345,11 @@ class SVAE:
                 )
 
                 recon_loss = (num_batches * recon_loss) / len(data)
-                local_kld = (num_batches * local_kld) / len(data)
-                global_kld = global_kld / len(data)
+                local_kld = local_kld_weight * ((num_batches * local_kld) / len(data))
+                global_kld = global_kld_weight * (global_kld / len(data))
 
                 kld_loss = global_kld + local_kld
-                loss = recon_loss + kld_weight * kld_loss
+                loss = recon_loss + kld_loss
 
                 optimizer.zero_grad()
                 # compute gradients
@@ -368,8 +368,8 @@ class SVAE:
                 total_loss.append(
                     (
                         recon_loss.item(),
-                        kld_weight * local_kld.item(),
-                        kld_weight * global_kld.item(),
+                        local_kld.item(),
+                        global_kld.item(),
                     )
                 )
             train_loss.append(np.mean(total_loss, axis=0))

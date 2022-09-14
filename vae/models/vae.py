@@ -10,7 +10,7 @@ from tqdm import tqdm
 from plot.gmm_plot import plot_reconstruction
 
 
-def init_weights(l):
+def init_weights(l, std=1e-2):
     """Initialization for MLP layers.
 
     E.g. can use: apply(init_weights) on a nn.Sequential object.
@@ -19,14 +19,16 @@ def init_weights(l):
     ----------
     l: torch.nn.Module
         layer to initialize.
+    std: float
+        standard deviation for weight initialization
 
     Returns
     -------
 
     """
     if isinstance(l, nn.Linear):
-        nn.init.normal_(l.weight, mean=0.0, std=1e-2)
-        nn.init.normal_(l.bias, mean=0.0, std=1e-2)
+        nn.init.normal_(l.weight, mean=0.0, std=std)
+        nn.init.normal_(l.bias, mean=0.0, std=std)
 
 
 def rand_partial_isometry(m, n):

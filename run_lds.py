@@ -27,7 +27,8 @@ vae_parameters = {
 svae_parameters = {
     "batch_size": 80,
     "epochs": 1000,
-    "kld_weight": 1.0,
+    "local_kld_weight": 1.0,
+    "global_kld_weight": 1.0,
     "latent_dim": vae_parameters["latent_dim"],
 }
 
