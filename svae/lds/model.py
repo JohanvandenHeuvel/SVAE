@@ -213,7 +213,7 @@ class SVAE:
 
             plt.close("all")
 
-    def fit(self, obs, epochs, batch_size, latent_dim, local_kld_weight, global_kld_weight):
+    def fit(self, obs, epochs, batch_size, latent_dim, local_kld_weight, global_kld_weight, update_init_params):
         """
         Find the optimum for global variational parameter eta_theta, and encoder/decoder parameters.
 
@@ -298,14 +298,15 @@ class SVAE:
                 Update global variational parameter eta_theta using natural gradient
                 """
                 # update global param
-                # nat_grad_init = natural_gradient(
-                #     pack_dense(*E_init_stats)[None, ...],
-                #     niw_param,
-                #     niw_prior,
-                #     len(data),
-                #     num_batches,
-                # )
-                # niw_param = niw_optimizer.update(niw_param, torch.stack(nat_grad_init))
+                if update_init_params:
+                    nat_grad_init = natural_gradient(
+                        pack_dense(*E_init_stats)[None, ...],
+                        niw_param,
+                        niw_prior,
+                        len(data),
+                        num_batches,
+                    )
+                    niw_param = niw_optimizer.update(niw_param, torch.stack(nat_grad_init))
 
                 nat_grad_pair = natural_gradient(
                     E_pair_stats, mniw_param, mniw_prior, len(data), num_batches

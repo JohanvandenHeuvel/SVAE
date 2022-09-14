@@ -14,6 +14,7 @@ experimental_parameters = {
     "global_kld_weight": 1.0,
     "name": "vae",
     "latent_dim": 10,
+    "update_init_params": False
 }
 
 data_parameters = {
@@ -39,6 +40,7 @@ svae_parameters = {
     "local_kld_weight": experimental_parameters["local_kld_weight"],
     "global_kld_weight": experimental_parameters["global_kld_weight"],
     "latent_dim": vae_parameters["latent_dim"],
+    "update_init_params": experimental_parameters["update_init_params"]
 }
 
 hyperparameters = {
