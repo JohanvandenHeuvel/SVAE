@@ -22,6 +22,7 @@ vae_parameters = {
     "hidden_size": [50],
     "recon_loss": "likelihood",
     "name": "vae",
+    "weight_init_std": 1e-2
 }
 
 svae_parameters = {

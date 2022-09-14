@@ -13,7 +13,7 @@ class resVAE(VAE):
 
     """
 
-    def __init__(self, input_size, hidden_size, latent_dim, name, recon_loss="MSE"):
+    def __init__(self, input_size, hidden_size, latent_dim, name, weight_init_std, recon_loss="MSE"):
 
         super().__init__(input_size, hidden_size, latent_dim, name, recon_loss)
 
@@ -31,8 +31,8 @@ class resVAE(VAE):
         mu_enc = nn.Sequential(encoder, nn.Linear(encoder_layers[-1], latent_dim))
         log_var_enc = nn.Sequential(encoder, nn.Linear(encoder_layers[-1], latent_dim))
 
-        mu_enc.apply(init_weights)
-        log_var_enc.apply(init_weights)
+        mu_enc.apply(init_weights, weight_init_std)
+        log_var_enc.apply(init_weights, weight_init_std)
 
         # linear regression
         mu_enc_identity = nn.Linear(input_size, latent_dim, bias=False)
@@ -63,8 +63,8 @@ class resVAE(VAE):
         mu_dec = nn.Sequential(decoder, nn.Linear(decoder_layers[-1], input_size))
         log_var_dec = nn.Sequential(decoder, nn.Linear(decoder_layers[-1], input_size))
 
-        mu_dec.apply(init_weights)
-        log_var_dec.apply(init_weights)
+        mu_dec.apply(init_weights, weight_init_std)
+        log_var_dec.apply(init_weights, weight_init_std)
 
         # linear regression
         mu_dec_identity = nn.Linear(latent_dim, input_size, bias=False)

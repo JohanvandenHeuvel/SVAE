@@ -51,7 +51,7 @@ def rand_partial_isometry(m, n):
 
 
 class VAE(nn.Module):
-    def __init__(self, input_size, hidden_size, latent_dim, name, recon_loss="MSE"):
+    def __init__(self, input_size, hidden_size, latent_dim, name, weight_init_std, recon_loss="MSE"):
 
         super().__init__()
         self.name = name
@@ -72,8 +72,8 @@ class VAE(nn.Module):
         self.mu_enc = nn.Sequential(encoder, nn.Linear(encoder_layers[-1], latent_dim))
         self.log_var_enc = nn.Sequential(encoder, nn.Linear(encoder_layers[-1], latent_dim))
 
-        self.mu_enc.apply(init_weights)
-        self.log_var_enc.apply(init_weights)
+        self.mu_enc.apply(init_weights, weight_init_std)
+        self.log_var_enc.apply(init_weights, weight_init_std)
 
         """
         DECODER
@@ -89,8 +89,8 @@ class VAE(nn.Module):
         self.mu_dec = nn.Sequential(decoder, nn.Linear(decoder_layers[-1], input_size))
         self.log_var_dec = nn.Sequential(decoder, nn.Linear(decoder_layers[-1], input_size))
 
-        self.mu_dec.apply(init_weights)
-        self.log_var_dec.apply(init_weights)
+        self.mu_dec.apply(init_weights, weight_init_std)
+        self.log_var_dec.apply(init_weights, weight_init_std)
 
         self.to(self.device)
         self.double()
