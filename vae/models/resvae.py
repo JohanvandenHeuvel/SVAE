@@ -82,3 +82,4 @@ class resVAE(VAE):
         self.log_var_dec = AddModule(log_var_dec, log_var_dec_identity)
 
         self.to(self.device)
+        self.double()
