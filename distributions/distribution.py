@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Tuple
+from typing import Tuple, List
 
 import torch
 
@@ -21,11 +21,6 @@ class ExpDistribution(ABC):
     @abstractmethod
     def natural_to_standard(self) -> Tuple:
         """Convert natural parameters to standard parameters."""
-        pass
-
-    @abstractmethod
-    def standard_to_natural(self, *args) -> torch.Tensor:
-        """Convert standard parameters to natural parameters."""
         pass
 
     @property
@@ -53,11 +48,20 @@ class ExpDistribution(ABC):
 
 def exponential_kld(dist_1: ExpDistribution, dist_2: ExpDistribution) -> float:
     # TODO sometimes gives negative values
-    value = (
-        torch.flatten((dist_1.nat_param - dist_2.nat_param))
-        @ torch.flatten(dist_1.expected_stats())
-        - dist_1.logZ()
-        + dist_2.logZ()
-    )
-    assert value >= 0
-    return value.item()
+    expected_stats = dist_1.expected_stats()
+    eta_1 = dist_1.nat_param
+    eta_2 = dist_2.nat_param
+    if isinstance(eta_1, List):
+        value = [torch.flatten(eta_1[i] - eta_2[i]).float() @ torch.flatten(expected_stats[i].float()) for i in range(len(eta_1))]
+        value = torch.sum(torch.stack(value))
+        value = value - (dist_1.logZ() - dist_2.logZ())
+        value = value
+    else:
+        value = (
+            torch.flatten((eta_1 - eta_2))
+            @ torch.flatten(expected_stats)
+            - dist_1.logZ()
+            + dist_2.logZ()
+        )
+        value = value
+    return value

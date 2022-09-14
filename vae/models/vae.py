@@ -59,18 +59,39 @@ class VAE(nn.Module):
         """
         ENCODER
         """
-        encoder = nn.Sequential(nn.Linear(input_size, hidden_size), nn.ReLU())
-        self.mu_enc = nn.Sequential(encoder, nn.Linear(hidden_size, latent_dim))
-        self.log_var_enc = nn.Sequential(encoder, nn.Linear(hidden_size, latent_dim))
+        encoder_layers = [input_size] + hidden_size
+        encoder_modules = nn.ModuleList()
+        # hidden layers
+        for i in range(len(encoder_layers) - 1):
+            encoder_modules.append(nn.Linear(encoder_layers[i], encoder_layers[i + 1]))
+            encoder_modules.append(nn.Tanh())
+        encoder = nn.Sequential(*encoder_modules)
+        # output layer
+        self.mu_enc = nn.Sequential(encoder, nn.Linear(encoder_layers[-1], latent_dim))
+        self.log_var_enc = nn.Sequential(encoder, nn.Linear(encoder_layers[-1], latent_dim))
+
+        self.mu_enc.apply(init_weights)
+        self.log_var_enc.apply(init_weights)
 
         """
         DECODER
         """
-        decoder = nn.Sequential(nn.Linear(latent_dim, hidden_size), nn.ReLU())
-        self.mu_dec = nn.Sequential(decoder, nn.Linear(hidden_size, input_size))
-        self.log_var_dec = nn.Sequential(decoder, nn.Linear(hidden_size, input_size))
+        decoder_layers = [latent_dim] + list(reversed(hidden_size))
+        decoder_modules = nn.ModuleList()
+        # hidden layers
+        for i in range(len(decoder_layers) - 1):
+            decoder_modules.append(nn.Linear(decoder_layers[i], decoder_layers[i + 1]))
+            decoder_modules.append(nn.Tanh())
+        decoder = nn.Sequential(*decoder_modules)
+        # output layer
+        self.mu_dec = nn.Sequential(decoder, nn.Linear(decoder_layers[-1], input_size))
+        self.log_var_dec = nn.Sequential(decoder, nn.Linear(decoder_layers[-1], input_size))
+
+        self.mu_dec.apply(init_weights)
+        self.log_var_dec.apply(init_weights)
 
         self.to(self.device)
+        self.double()
 
     def encode(self, x):
         return self.mu_enc(x), self.log_var_enc(x)
@@ -84,11 +105,11 @@ class VAE(nn.Module):
         mu_x, log_var_x = self.decode(z)
         return mu_x, log_var_x, mu_z, log_var_z
 
-    def loss_function(self, x, mu_x, log_var_x):
+    def loss_function(self, x, mu_x, log_var_x, full=False, reduction="mean"):
         if self.recon_loss == "MSE":
             recon_loss = F.mse_loss(mu_x, x)
         elif self.recon_loss == "likelihood":
-            recon_loss = F.gaussian_nll_loss(mu_x, x, log_var_x.exp())
+            recon_loss = F.gaussian_nll_loss(mu_x, x, log_var_x.exp(), full=full, reduction=reduction)
         return recon_loss
 
     def save_and_log(self, obs, epoch, save_path):
@@ -103,20 +124,23 @@ class VAE(nn.Module):
             log_var_x.cpu().detach().numpy(),
             z.cpu().detach().numpy(),
             title=f"{epoch}_vae_recon",
-            save_path=save_path,
         )
 
-    def save_model(self):
+    def save_model(self, path=None, affix=None):
         """save model to disk"""
-        path = pathlib.Path().resolve()
-        torch.save(self.state_dict(), os.path.join(path, f"{self.name}.pt"))
-        print(f"saved model to {os.path.join(path, f'{self.name}.pt')}")
+        if path is None:
+            path = pathlib.Path().resolve()
+        name = f"{self.name}_{affix}.pt" if affix is not None else f"{self.name}.pt"
+        torch.save(self.state_dict(), os.path.join(path, name))
+        # print(f"saved model to {os.path.join(path, name)}")
 
-    def load_model(self):
+    def load_model(self, path=None, affix=None):
         """load model from disk"""
-        path = pathlib.Path().resolve()
-        self.load_state_dict(torch.load(os.path.join(path, f"{self.name}.pt")))
-        print(f"loaded model from {os.path.join(path, f'{self.name}.pt')}")
+        if path is None:
+            path = pathlib.Path().resolve()
+        name = f"{self.name}_{affix}.pt" if affix is not None else f"{self.name}.pt"
+        self.load_state_dict(torch.load(os.path.join(path, name)))
+        print(f"loaded model from {os.path.join(path, name)}")
 
     def reparameterize(self, mu, log_var):
         """reparameterization trick for Gaussian"""
@@ -127,7 +151,7 @@ class VAE(nn.Module):
     def kld(self, mu_z, log_var_z):
         """Kullback-Leibler divergence for Gaussian"""
         value = torch.mean(
-            -0.5 * torch.sum(1 + log_var_z - mu_z ** 2 - log_var_z.exp(), dim=1), dim=0
+            -0.5 * torch.sum(1 + log_var_z - mu_z**2 - log_var_z.exp(), dim=1), dim=0
         )
         return value
 

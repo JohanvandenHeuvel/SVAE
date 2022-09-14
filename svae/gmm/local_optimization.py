@@ -2,6 +2,7 @@ from typing import Tuple
 
 import numpy as np
 import torch
+from torch import Tensor
 
 from distributions import (
     Gaussian,
@@ -11,9 +12,7 @@ from distributions import (
 )
 
 
-def initialize_meanfield(
-    label_parameters: torch.Tensor, potentials: torch.Tensor
-) -> torch.Tensor:
+def initialize_meanfield(label_parameters: Tensor, potentials: Tensor) -> Tensor:
     device = potentials.device
     T = len(potentials)
     K = len(label_parameters)
@@ -23,9 +22,7 @@ def initialize_meanfield(
 
 
 def local_optimization(
-    potentials: torch.Tensor,
-    eta_theta: Tuple[torch.Tensor, torch.Tensor],
-    epochs: int = 100,
+    potentials: Tensor, eta_theta: Tuple[Tensor, Tensor], epochs: int = 100,
 ):
     """
     Find the optimum for local variational parameters eta_x, eta_z
@@ -41,10 +38,8 @@ def local_optimization(
     """
 
     def gaussian_optimization(
-        gaussian_parameters: torch.Tensor,
-        potentials: torch.Tensor,
-        label_stats: torch.Tensor,
-    ) -> Tuple[torch.Tensor, torch.Tensor, float]:
+        gaussian_parameters: Tensor, potentials: Tensor, label_stats: Tensor,
+    ) -> Tuple[Tensor, Tensor, float]:
         # message from parent to child
         gaussian_potentials = torch.tensordot(
             label_stats, gaussian_parameters, [[1], [0]]
@@ -59,10 +54,8 @@ def local_optimization(
         return eta_x, gaussian_stats, gaussian_kld.item()
 
     def label_optimization(
-        gaussian_parameters: torch.Tensor,
-        label_parameters: torch.Tensor,
-        gaussian_stats: torch.Tensor,
-    ) -> Tuple[torch.Tensor, torch.Tensor, float]:
+        gaussian_parameters: Tensor, label_parameters: Tensor, gaussian_stats: Tensor,
+    ) -> Tuple[Tensor, Tensor, float]:
         # message from child to parent
         label_potentials = torch.tensordot(
             gaussian_stats, gaussian_parameters, [[1, 2], [1, 2]]
@@ -132,7 +125,6 @@ def local_optimization(
     niw_stats = torch.tensordot(label_stats, gaussian_stats, [[0], [0]])
     prior_stats = dirichlet_stats, niw_stats
 
-    # get the latents using the eta_x parameters we just optimized
     samples = Gaussian(eta_x).rsample()
 
     return samples, eta_x, label_stats, prior_stats, local_kld

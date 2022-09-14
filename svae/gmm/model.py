@@ -1,55 +1,51 @@
 import os
-import pathlib
 
 import numpy as np
 import torch
+import wandb
 from torch.utils.data import DataLoader
-from tqdm import tqdm
 
-from dense import pack_dense, unpack_dense
-from distributions import (
-    Gaussian,
-)
+from distributions import Gaussian
+from matrix_ops import pack_dense, unpack_dense
 from plot.gmm_plot import plot_reconstruction
-from svae.local_optimization.gmm import local_optimization
-from svae.global_optimization import (
-    natural_gradient,
+from svae.gradient import natural_gradient, SGDOptim
+from vae import VAE
+from .global_optimization import (
     initialize_global_gmm_parameters,
     prior_kld_gmm,
 )
-from vae import VAE
-
-
-def gradient_descent(w, grad_w, step_size):
-    return w - step_size * grad_w
+from .local_optimization import local_optimization
 
 
 class SVAE:
-    def __init__(self, vae: VAE):
+    def __init__(self, vae: VAE, save_path=None):
         self.vae = vae
         self.device = vae.device
 
         self.eta_theta = None
+        self.save_path = save_path
 
-    def save_model(self):
+        if save_path is not None:
+            os.mkdir(save_path)
+
+    def save_model(self, epoch):
         """save model to disk"""
-        path = pathlib.Path().resolve()
+        path = self.save_path
 
         # network
-        self.vae.save_model()
+        self.vae.save_model(path, epoch)
 
         # global parameters
-        torch.save(self.eta_theta, os.path.join(path, f"eta_theta.pt"))
+        torch.save(self.eta_theta, os.path.join(path, f"eta_theta_{epoch}.pt"))
 
-    def load_model(self):
+    def load_model(self, path, epoch):
         """load model from disk"""
-        path = pathlib.Path().resolve()
 
         # network
-        self.vae.load_model()
+        self.vae.load_model(path, epoch)
 
         # global parameters
-        self.eta_theta = torch.load(os.path.join(path, f"eta_theta.pt"))
+        self.eta_theta = torch.load(os.path.join(path, f"eta_theta_{epoch}.pt"))
 
     def encode(self, y):
         mu, log_var = self.vae.encode(y)
@@ -68,8 +64,11 @@ class SVAE:
         mu_y, log_var_y = self.decode(x)
         return mu_y, log_var_y, x, classes
 
-    def save_and_log(self, obs, epoch, save_path, eta_theta):
+    def save_and_log(self, obs, epoch, eta_theta):
         with torch.no_grad():
+            self.eta_theta = eta_theta
+            self.save_model(epoch)
+
             data = torch.tensor(obs).to(self.vae.device).float()
             potentials = self.encode(data)
 
@@ -82,18 +81,19 @@ class SVAE:
             # get reconstructions
             mu_y, log_var_y = self.decode(x)
 
-            plot_reconstruction(
+            fig = plot_reconstruction(
                 obs=obs,
-                mu=mu_y.cpu().detach().numpy(),
-                log_var=log_var_y.cpu().detach().numpy(),
+                mu=mu_y.squeeze().cpu().detach().numpy(),
+                log_var=log_var_y.squeeze().cpu().detach().numpy(),
                 latent=Ex.cpu().detach().numpy(),
                 eta_theta=eta_theta,
                 classes=torch.argmax(label_stats, dim=-1).cpu().detach().numpy(),
                 title=f"epoch:{epoch}_svae",
-                save_path=save_path,
             )
 
-    def fit(self, obs, epochs, batch_size, K, kld_weight, save_path=None):
+            wandb.log({"fig": fig})
+
+    def fit(self, obs, epochs, batch_size, K, kld_weight):
         """
         Find the optimum for global variational parameter eta_theta, and encoder/decoder parameters.
 
@@ -109,13 +109,8 @@ class SVAE:
             Number of clusters in latent space.
         kld_weight:
             Weight for the KLD in the loss.
-        save_path:
-            Where to save plots etc.
         """
         print("Training the SVAE ...")
-
-        if save_path is not None:
-            os.mkdir(save_path)
 
         # Make data object
         data = torch.tensor(obs).to(self.vae.device)
@@ -132,11 +127,12 @@ class SVAE:
             K, D, alpha=1.0, niw_conc=1.0, random_scale=3.0
         )
 
-        optimizer = torch.optim.Adam(self.vae.parameters(), lr=1e-3, weight_decay=0.001)
+        optimizer = torch.optim.Adam(self.vae.parameters(), lr=1e-3, weight_decay=1e-3)
+        global_optmizer = SGDOptim(step_size=10)
 
         train_loss = []
-        # self.save_and_log(obs, "pre", save_path, eta_theta)
-        for epoch in tqdm(range(epochs + 1)):
+        self.save_and_log(obs, "pre", eta_theta)
+        for epoch in range(epochs + 1):
 
             total_loss = []
             for i, y in enumerate(dataloader):
@@ -163,7 +159,7 @@ class SVAE:
                 # do SGD on the natural gradient
                 eta_theta = tuple(
                     [
-                        gradient_descent(eta_theta[i], nat_grad[i], step_size=10)
+                        global_optmizer.update(eta_theta[i], nat_grad[i])
                         for i in range(len(eta_theta))
                     ]
                 )
@@ -188,15 +184,14 @@ class SVAE:
                 # update parameters
                 optimizer.step()
 
-                total_loss.append((recon_loss.item(), kld_weight * kld_loss))
+                wandb.log({"recon_loss": recon_loss, "kld": kld_weight * kld_loss})
+
+                total_loss.append((recon_loss.item(), kld_weight * kld_loss.item()))
             train_loss.append(np.mean(total_loss, axis=0))
 
+            print(f"[{epoch}/{epochs + 1}] {train_loss[-1].sum()}")
             if epoch % max((epochs // 10), 1) == 0:
-                self.save_and_log(obs, epoch, save_path, eta_theta)
-
-        self.save_and_log(obs, "end", save_path, eta_theta)
+                self.save_and_log(obs, epoch, eta_theta)
 
         print("Finished training of the SVAE")
-        self.eta_theta = eta_theta
-        self.save_model()
-        return train_loss
+        self.save_and_log(obs, "end", eta_theta)

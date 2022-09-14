@@ -1,12 +1,11 @@
-import os
-
-import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
 import torch
+from plotly.subplots import make_subplots
 
 from distributions import Dirichlet, NormalInverseWishart, Gaussian
-
 
 cm = plt.get_cmap("tab20")
 
@@ -19,7 +18,6 @@ def plot_reconstruction(
     eta_theta=None,
     classes=None,
     title=None,
-    save_path=None,
 ):
     """
 
@@ -39,8 +37,6 @@ def plot_reconstruction(
         cluster assignment for the data-points
     title: String
         title for the plot
-    save_path: String
-        where to save the plot
     """
 
     def generate_ellipse(params):
@@ -54,97 +50,59 @@ def plot_reconstruction(
         ellipse = 2.0 * np.dot(np.linalg.cholesky(Sigma), circle)
         return ellipse[0] + mu[0], ellipse[1] + mu[1]
 
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 5))
+    fig = make_subplots(rows=1, cols=2, subplot_titles=("Latent", "Observation"))
 
     """
     plot the latent dimension in the left plot
     """
     if latent is not None:
-        _plot_scatter(ax1, latent, title="latents")
+        x, y = zip(*latent)
+        fig.add_trace(go.Scatter(x=x, y=y, mode="markers", name="latent"), row=1, col=1)
 
     if eta_theta is not None:
-        _plot_clusters(ax1, eta_theta, title="latents")
-        ax1.legend()
+        plots = _plot_clusters(fig, eta_theta)
+        for i, plot in enumerate(plots):
+            fig.add_trace(plot, row=1, col=1)
 
     """
     plot the observations in the right plot
     """
     if obs is not None:
-        _plot_scatter(ax2, obs, title="reconstruction")
+        x, y = zip(*obs)
+        fig.add_trace(go.Scatter(x=x, y=y, mode="markers", name="obs"), row=1, col=2)
 
     if mu is not None:
-        _plot_scatter(ax2, mu, c=classes, title="reconstruction")
-        ax2.legend()
+        x, y = zip(*mu)
+        fig.add_trace(
+            go.Scatter(
+                x=x,
+                y=y,
+                mode="markers",
+                name="recon",
+                marker={"color": [px.colors.qualitative.Alphabet[i] for i in classes]},
+            ),
+            row=1,
+            col=2,
+        )
 
-        if log_var is not None:
-            ellipses = list(map(generate_ellipse, zip(mu, log_var)))
-            for (x, y) in ellipses:
-                ax2.plot(x, y, alpha=0.1, linestyle="-", linewidth=1)
+    #     if log_var is not None:
+    #         ellipses = list(map(generate_ellipse, zip(mu, log_var)))
+    #         for (x, y) in ellipses:
+    #             ax2.plot(x, y, alpha=0.1, linestyle="-", linewidth=1)
 
-    fig.suptitle(title)
-    fig.tight_layout()
-    # save the figure to disk or show it
-    if save_path is not None:
-        if title is None:
-            raise ValueError(f"saving requires title but title is {title}")
-        fig.savefig(os.path.join(save_path, title))
-        plt.close(fig)
-    else:
-        plt.plot()
-
-
-def plot_loss(loss, title=None, save_path=None):
-    """
-
-    Parameters
-    ----------
-    loss: List
-        loss values for every epoch
-    title: String
-        title for the plot
-    save_path: String
-        where to save the plot
-
-    Returns
-    -------
-
-    """
-
-    if loss == 0:
-        # TODO needed to handle model loading without losses saved, not most elegant solution
-        return
-
-    recon_loss, kld_loss = list(zip(*loss))
-    fig, ax = plt.subplots()
-    ax.plot(recon_loss)
-    ax.plot(kld_loss)
-    ax.set_title(title)
-    ax.set_xlabel("epochs")
-    ax.set_ylabel("loss")
-    ax.legend(["recon", "kld"])
-
-    # save the figure to disk or show it
-    if save_path is not None:
-        if title is None:
-            raise ValueError(f"saving requires title but title is {title}")
-        fig.savefig(os.path.join(save_path, title))
-        plt.close(fig)
-    else:
-        plt.plot()
+    return fig
 
 
-def _plot_clusters(ax, eta_theta, title=None):
+def _plot_clusters(fig, eta_theta):
     """
     Plot latent clusters of the SVAE
 
     Parameters
     ----------
-    ax:
-        which ax to plot on
+    fig:
+        which fig to plot on
     eta_theta:
         parameters for clusters in latent space
-    title: String
-        title for the plot
 
     """
 
@@ -185,6 +143,7 @@ def _plot_clusters(ax, eta_theta, title=None):
     """
     plot latent clusters
     """
+    plots = []
     for i, (weight, (mu, Sigma)) in enumerate(zip(weights, components)):
         # don't plot clusters that are hardly visible
         if weight > 0.05:
@@ -193,31 +152,12 @@ def _plot_clusters(ax, eta_theta, title=None):
             if isinstance(Sigma, torch.Tensor):
                 Sigma = Sigma.cpu().detach().numpy()
             x, y = generate_ellipse(mu, Sigma)
-            ax.plot(
-                x,
-                y,
-                alpha=weight,
-                linestyle="-",
-                linewidth=3,
-                color=cm.colors[i],
-                label=f"{i}",
+            plots.append(
+                go.Scatter(
+                    x=x,
+                    y=y,
+                    line={"color": px.colors.qualitative.Alphabet[i], "dash": "dash"},
+                    name=f"cluster_{i}",
+                )
             )
-
-    ax.legend()
-    ax.set_title(title)
-
-
-def _plot_scatter(ax, data, c=None, alpha=0.7, title=None):
-    """
-    Make scatter plot for data of the form [(x1, y1), ..., (xi, yi), ...]
-    """
-    x, y = zip(*data)
-    if c is not None:
-        x = np.array(x)
-        y = np.array(y)
-        for value in np.unique(c):
-            mask = c == value
-            ax.scatter(x[mask], y[mask], color=cm.colors[value], label=f"{value}")
-    else:
-        ax.scatter(x, y, c="black", alpha=alpha)
-    ax.set_title(title)
+    return plots

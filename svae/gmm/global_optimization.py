@@ -3,7 +3,11 @@ from typing import Tuple
 import numpy as np
 import torch
 
-from distributions import NormalInverseWishart, Dirichlet, exponential_kld
+from distributions import (
+    NormalInverseWishart,
+    Dirichlet,
+    exponential_kld,
+)
 
 
 def initialize_global_gmm_parameters(
@@ -62,40 +66,6 @@ def initialize_global_gmm_parameters(
     niw_natural_parameters = niw_natural_parameters.detach()
 
     return dirichlet_natural_parameters.to(device), niw_natural_parameters.to(device)
-
-
-def natural_gradient(
-    stats: Tuple[torch.Tensor, torch.Tensor],
-    eta_theta: Tuple[torch.Tensor, torch.Tensor],
-    eta_theta_prior: Tuple[torch.Tensor, torch.Tensor],
-    N: int,
-    num_batches: int,
-) -> Tuple[torch.Tensor, torch.Tensor]:
-    """
-    Natural gradient for the global variational parameters eta_theta
-
-    Parameters
-    ----------
-    stats:
-       Sufficient statistics.
-    eta_theta:
-        Posterior natural parameters for global variables.
-    eta_theta_prior:
-        Prior natural parameters for global variables.
-    N:
-        Number of data-points.
-    num_batches:
-        Number of batches in the data.
-    """
-
-    def nat_grad(prior, posterior, s) -> torch.Tensor:
-        return -1.0 / N * (prior - posterior + num_batches * s)
-
-    value = (
-        nat_grad(eta_theta_prior[0], eta_theta[0], stats[0]),
-        nat_grad(eta_theta_prior[1], eta_theta[1], stats[1]),
-    )
-    return value
 
 
 def prior_kld_gmm(

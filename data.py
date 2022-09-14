@@ -1,6 +1,55 @@
 import numpy as np
 import numpy.random as npr
 import matplotlib.pyplot as plt
+from scipy.signal import sawtooth
+import torch
+from torch.utils.data import Dataset
+
+
+class WindowData(Dataset):
+    def __init__(self, data, window_length):
+        n_windows = len(data) % window_length
+        windows = [
+            (i * window_length, (i + 1) * window_length) for i in range(n_windows)
+        ]
+        self.data = [data[window[0] : window[1]] for window in windows]
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, item):
+        return self.data[item]
+
+
+def make_lds_data(A, Q, C, R, T):
+    P, N = C.shape
+    x = [torch.randn(N)]
+    for t in range(T - 1):
+        old_x = x[t]
+        new_x = A @ old_x + Q @ torch.randn(N)
+        x.append(new_x)
+    x = torch.stack(x)
+    y = x @ C.T + torch.randn(T, P) @ R.T
+    return y
+
+
+def make_dot_data(
+    image_width, T, num_steps, x0=0.0, v=0.5, render_sigma=0.2, noise_sigma=0.1
+):
+    def triangle(t):
+        return sawtooth(np.pi * t, width=0.5)
+
+    def dot_trajectory(t):
+        return triangle(v * (t + (1 + x0) / 2))
+
+    def render(x):
+        return np.exp(-0.5 * ((x - grid) / render_sigma) ** 2)
+
+    grid = np.linspace(-1, 1, image_width, endpoint=True)
+    images = np.vstack(
+        [render(dot_trajectory(t)) for t in np.linspace(0, T, num_steps)]
+    )
+    return images + noise_sigma * npr.randn(*images.shape)
 
 
 def make_pinwheel_data(radial_std, tangential_std, num_classes, num_per_class, rate):

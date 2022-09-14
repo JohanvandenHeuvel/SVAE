@@ -8,6 +8,8 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+wandb/
+
 # C extensions
 *.so
 
@@ -271,9 +273,13 @@ fabric.properties
 # Azure Toolkit for IntelliJ plugin
 # https://plugins.jetbrains.com/plugin/8053-azure-toolkit-for-intellij
 .idea/**/azureSettings.xml
+.idea
 
 # End of https://www.toptal.com/developers/gitignore/api/pycharm
 
+# experimental results
+results
 
-# End of https://www.toptal.com/developers/gitignore/api/python
-
+# saved model files
+*.pt
+*.pickle
