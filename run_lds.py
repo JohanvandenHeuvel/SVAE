@@ -51,8 +51,8 @@ def get_network():
 
 def main():
     # logging
-    folder_name = make_folder()
     wandb.init(project="SVAE_lds", config=hyperparameters)
+    folder_name = make_folder(wandb.run.name)
 
     # get data and vae model
     observations = get_data()

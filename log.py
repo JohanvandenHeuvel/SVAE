@@ -1,9 +1,7 @@
 import os
-import time
 
 
-def make_folder():
-    timestr = time.strftime("date:%m_%d-time:%H_%M_%S")
-    path = os.path.join("results", timestr)
+def make_folder(name):
+    path = os.path.join("results", name)
     os.makedirs(path)
     return path
