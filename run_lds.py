@@ -8,6 +8,14 @@ from svae.lds import SVAE
 from vae import VAE, resVAE
 from seed import SEED
 
+experimental_parameters = {
+    "weight_init_std": 1e-2,
+    "local_kld_weight": 1.0,
+    "global_kld_weight": 1.0,
+    "name": "vae",
+    "latent_dim": 10,
+}
+
 data_parameters = {
     "image_width": 12,
     "T": 500,
@@ -17,19 +25,19 @@ data_parameters = {
 }
 
 vae_parameters = {
-    "latent_dim": 10,
+    "latent_dim": experimental_parameters["latent_dim"],
     "input_size": data_parameters["image_width"],
     "hidden_size": [50],
     "recon_loss": "likelihood",
-    "name": "vae",
-    "weight_init_std": 1e-2
+    "name": experimental_parameters["name"],
+    "weight_init_std": experimental_parameters["weight_init_std"]
 }
 
 svae_parameters = {
     "batch_size": 80,
     "epochs": 1000,
-    "local_kld_weight": 1.0,
-    "global_kld_weight": 1.0,
+    "local_kld_weight": experimental_parameters["local_kld_weight"],
+    "global_kld_weight": experimental_parameters["global_kld_weight"],
     "latent_dim": vae_parameters["latent_dim"],
 }
 
