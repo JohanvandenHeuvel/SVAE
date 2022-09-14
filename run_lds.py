@@ -5,7 +5,7 @@ import wandb
 from data import make_dot_data
 from log import make_folder
 from svae.lds import SVAE
-from vae import VAE
+from vae import VAE, resVAE
 from seed import SEED
 
 data_parameters = {
@@ -45,8 +45,13 @@ def get_data():
 
 
 def get_network():
-    network = VAE(**hyperparameters["VAE_parameters"])
-    return network
+    name = hyperparameters["VAE_parameters"]["name"]
+    if name == "vae":
+        return VAE(**hyperparameters["VAE_parameters"])
+    elif name == "resvae":
+        return resVAE(**hyperparameters["VAE_parameters"])
+    else:
+        raise ValueError(f"Network name {name} not recognized!")
 
 
 def main():
