@@ -173,7 +173,6 @@ class SVAE:
                 potentials,
                 prefix=prefix,
                 title=f"{epoch}_potentials",
-                save_path=self.save_path,
             )
 
             fig_info_params = plot_info_parameters(
@@ -184,7 +183,6 @@ class SVAE:
                 A,
                 Q,
                 title=f"{epoch}_info_params",
-                save_path=self.save_path,
             )
 
             fig_obs = plot(
@@ -192,14 +190,12 @@ class SVAE:
                 samples=decoded_means.cpu().detach().numpy(),
                 prefix=prefix,
                 title=f"{epoch}_obs",
-                save_path=self.save_path,
             )
 
             fig_latents = plot_latents(
                 latents=latent_samples.cpu().detach().numpy(),
                 prefix=prefix,
                 title=f"{epoch}_latents",
-                save_path=self.save_path,
             )
 
             wandb.log(
