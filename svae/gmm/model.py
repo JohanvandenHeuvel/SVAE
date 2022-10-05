@@ -84,11 +84,9 @@ class SVAE:
             fig = plot_reconstruction(
                 obs=obs,
                 mu=mu_y.squeeze().cpu().detach().numpy(),
-                log_var=log_var_y.squeeze().cpu().detach().numpy(),
                 latent=Ex.cpu().detach().numpy(),
                 eta_theta=eta_theta,
                 classes=torch.argmax(label_stats, dim=-1).cpu().detach().numpy(),
-                title=f"epoch:{epoch}_svae",
             )
 
             wandb.log({"fig": fig})
