@@ -283,3 +283,5 @@ results
 # saved model files
 *.pt
 *.pickle
+
+*.DS_Store

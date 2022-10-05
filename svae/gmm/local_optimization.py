@@ -22,7 +22,9 @@ def initialize_meanfield(label_parameters: Tensor, potentials: Tensor) -> Tensor
 
 
 def local_optimization(
-    potentials: Tensor, eta_theta: Tuple[Tensor, Tensor], epochs: int = 100,
+    potentials: Tensor,
+    eta_theta: Tuple[Tensor, Tensor],
+    epochs: int = 100,
 ):
     """
     Find the optimum for local variational parameters eta_x, eta_z
@@ -38,7 +40,9 @@ def local_optimization(
     """
 
     def gaussian_optimization(
-        gaussian_parameters: Tensor, potentials: Tensor, label_stats: Tensor,
+        gaussian_parameters: Tensor,
+        potentials: Tensor,
+        label_stats: Tensor,
     ) -> Tuple[Tensor, Tensor, float]:
         # message from parent to child
         gaussian_potentials = torch.tensordot(
@@ -54,7 +58,9 @@ def local_optimization(
         return eta_x, gaussian_stats, gaussian_kld.item()
 
     def label_optimization(
-        gaussian_parameters: Tensor, label_parameters: Tensor, gaussian_stats: Tensor,
+        gaussian_parameters: Tensor,
+        label_parameters: Tensor,
+        gaussian_stats: Tensor,
     ) -> Tuple[Tensor, Tensor, float]:
         # message from child to parent
         label_potentials = torch.tensordot(
@@ -69,7 +75,6 @@ def local_optimization(
         )
         return eta_z, label_stats, label_kld.item()
 
-    # with torch.no_grad():
     """
     priors
     """
@@ -77,12 +82,11 @@ def local_optimization(
     label_parameters = Dirichlet(dir_param).expected_stats()
     gaussian_parameters = NormalInverseWishart(niw_param).expected_stats()
 
-    # with torch.no_grad():
     """
     optimize local variational parameters
     """
     kl = np.inf
-    label_stats = initialize_meanfield(label_parameters, potentials)
+    label_stats = initialize_meanfield(label_parameters, potentials).double()
     for i in range(epochs):
         """
         Gaussian x
