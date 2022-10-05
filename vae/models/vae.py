@@ -9,6 +9,8 @@ from tqdm import tqdm
 
 from plot.gmm_plot import plot_reconstruction
 
+from .autoencoder import Autoencoder
+
 
 def init_weights(l, std=1e-2):
     """Initialization for MLP layers.
@@ -50,12 +52,32 @@ def rand_partial_isometry(m, n):
     return value
 
 
-class VAE(nn.Module):
-    def __init__(self, input_size, hidden_size, latent_dim, name, weight_init_std, recon_loss="MSE"):
+def reparameterize(mu, log_var):
+    """reparameterization trick for Gaussian"""
+    std = torch.exp(0.5 * log_var)
+    eps = torch.randn_like(std)
+    return eps * std + mu
 
-        super().__init__()
-        self.name = name
-        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+def kld(mu_z, log_var_z):
+    """Kullback-Leibler divergence for Gaussian"""
+    value = torch.mean(
+        -0.5 * torch.sum(1 + log_var_z - mu_z**2 - log_var_z.exp(), dim=1), dim=0
+    )
+    return value
+
+
+class VAE(Autoencoder):
+    def __init__(
+        self,
+        input_size,
+        hidden_size,
+        latent_dim,
+        weight_init_std,
+        name="vae",
+        recon_loss="MSE",
+    ):
+        super().__init__(name)
         self.recon_loss = recon_loss
 
         """
@@ -70,7 +92,9 @@ class VAE(nn.Module):
         encoder = nn.Sequential(*encoder_modules)
         # output layer
         self.mu_enc = nn.Sequential(encoder, nn.Linear(encoder_layers[-1], latent_dim))
-        self.log_var_enc = nn.Sequential(encoder, nn.Linear(encoder_layers[-1], latent_dim))
+        self.log_var_enc = nn.Sequential(
+            encoder, nn.Linear(encoder_layers[-1], latent_dim)
+        )
 
         self.mu_enc.apply(lambda l: init_weights(l, weight_init_std))
         self.log_var_enc.apply(lambda l: init_weights(l, weight_init_std))
@@ -87,11 +111,14 @@ class VAE(nn.Module):
         decoder = nn.Sequential(*decoder_modules)
         # output layer
         self.mu_dec = nn.Sequential(decoder, nn.Linear(decoder_layers[-1], input_size))
-        self.log_var_dec = nn.Sequential(decoder, nn.Linear(decoder_layers[-1], input_size))
+        self.log_var_dec = nn.Sequential(
+            decoder, nn.Linear(decoder_layers[-1], input_size)
+        )
 
         self.mu_dec.apply(lambda l: init_weights(l, weight_init_std))
         self.log_var_dec.apply(lambda l: init_weights(l, weight_init_std))
 
+        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.to(self.device)
         self.double()
 
@@ -103,7 +130,7 @@ class VAE(nn.Module):
 
     def forward(self, x):
         mu_z, log_var_z = self.encode(x)
-        z = self.reparameterize(mu_z, log_var_z)
+        z = reparameterize(mu_z, log_var_z)
         mu_x, log_var_x = self.decode(z)
         return mu_x, log_var_x, mu_z, log_var_z
 
@@ -111,51 +138,24 @@ class VAE(nn.Module):
         if self.recon_loss == "MSE":
             recon_loss = F.mse_loss(mu_x, x)
         elif self.recon_loss == "likelihood":
-            recon_loss = F.gaussian_nll_loss(mu_x, x, log_var_x.exp(), full=full, reduction=reduction)
+            recon_loss = F.gaussian_nll_loss(
+                mu_x, x, log_var_x.exp(), full=full, reduction=reduction
+            )
+        else:
+            raise ValueError(f"Loss function {self.recon_loss} not recognized!")
         return recon_loss
 
-    def save_and_log(self, obs, epoch, save_path):
+    def save_and_log(self, obs):
         data = torch.tensor(obs).to(self.device).float()
         mu_z, log_var_z = self.encode(data)
-        z = self.reparameterize(mu_z, log_var_z)
+        z = reparameterize(mu_z, log_var_z)
 
         mu_x, log_var_x = self.decode(z)
         plot_reconstruction(
             obs,
             mu_x.cpu().detach().numpy(),
-            log_var_x.cpu().detach().numpy(),
             z.cpu().detach().numpy(),
-            title=f"{epoch}_vae_recon",
         )
-
-    def save_model(self, path=None, affix=None):
-        """save model to disk"""
-        if path is None:
-            path = pathlib.Path().resolve()
-        name = f"{self.name}_{affix}.pt" if affix is not None else f"{self.name}.pt"
-        torch.save(self.state_dict(), os.path.join(path, name))
-        # print(f"saved model to {os.path.join(path, name)}")
-
-    def load_model(self, path=None, affix=None):
-        """load model from disk"""
-        if path is None:
-            path = pathlib.Path().resolve()
-        name = f"{self.name}_{affix}.pt" if affix is not None else f"{self.name}.pt"
-        self.load_state_dict(torch.load(os.path.join(path, name)))
-        print(f"loaded model from {os.path.join(path, name)}")
-
-    def reparameterize(self, mu, log_var):
-        """reparameterization trick for Gaussian"""
-        std = torch.exp(0.5 * log_var)
-        eps = torch.randn_like(std)
-        return eps * std + mu
-
-    def kld(self, mu_z, log_var_z):
-        """Kullback-Leibler divergence for Gaussian"""
-        value = torch.mean(
-            -0.5 * torch.sum(1 + log_var_z - mu_z**2 - log_var_z.exp(), dim=1), dim=0
-        )
-        return value
 
     def fit(
         self, obs, epochs, batch_size, kld_weight, save_path=None, force_train=False
@@ -174,9 +174,9 @@ class VAE(nn.Module):
             os.mkdir(save_path)
 
         # Make data object
-        data = torch.tensor(obs).to(self.device)
+        # data = torch.tensor(obs).to(self.device)
         train_loader = torch.utils.data.DataLoader(
-            data, batch_size=batch_size, shuffle=True
+            obs, batch_size=batch_size, shuffle=True
         )
 
         # Create optimizer
@@ -187,8 +187,8 @@ class VAE(nn.Module):
         for epoch in tqdm(range(epochs)):
             # Start inner training loop, each iter one pass over a single batch
             total_loss = []
-            for obs_batch in train_loader:
-                obs_batch = obs_batch.float()
+            for obs_batch, _ in train_loader:
+                obs_batch = obs_batch.double()
 
                 # get values from the model
                 mu_x, log_var_x, mu_z, log_var_z = self.forward(obs_batch)
@@ -196,7 +196,7 @@ class VAE(nn.Module):
                 # reconstruction loss
                 recon_loss = self.loss_function(obs_batch, mu_x, log_var_x)
                 # regularization
-                kld_loss = self.kld(mu_z, log_var_z)
+                kld_loss = kld(mu_z, log_var_z)
                 # loss is combination of above two
                 loss = recon_loss + kld_weight * kld_loss
 
@@ -210,7 +210,7 @@ class VAE(nn.Module):
             train_loss.append(np.mean(total_loss, axis=0))
 
             if epoch % (epochs // 10) == 0:
-                self.save_and_log(obs, epoch, save_path)
+                self.save_and_log(obs)
 
         self.save_model()
         return train_loss

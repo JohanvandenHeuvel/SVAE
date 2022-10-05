@@ -65,7 +65,7 @@ def initialize_global_gmm_parameters(
     dirichlet_natural_parameters = dirichlet_natural_parameters.detach()
     niw_natural_parameters = niw_natural_parameters.detach()
 
-    return dirichlet_natural_parameters.to(device), niw_natural_parameters.to(device)
+    return dirichlet_natural_parameters.to(device).double(), niw_natural_parameters.to(device).double()
 
 
 def prior_kld_gmm(

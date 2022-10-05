@@ -7,6 +7,12 @@ import torch.linalg
 from matrix_ops import unpack_dense
 
 
+def _plot_video_observations(ax, obs, prefix):
+    ax.matshow(obs, cmap="gray")
+    ax.plot([prefix - 0.5, prefix - 0.5], [-0.5, len(obs)], "r", linewidth=2)
+    ax.axis("off")
+
+
 def plot_list(l):
     x = np.arange(0, len(l))
     fig, ax = plt.subplots()
@@ -14,7 +20,7 @@ def plot_list(l):
     return fig
 
 
-def plot_observations(obs, samples, variance, title="plot", save_path=None):
+def plot_observations(obs, samples, variance, title="plot"):
     N = obs.shape[-1]
     fig, axs = plt.subplots(N, 1, figsize=(10, N * 4))
 
@@ -37,24 +43,10 @@ def plot_observations(obs, samples, variance, title="plot", save_path=None):
 
     fig.suptitle(title)
     fig.tight_layout()
-    # # save the figure to disk or show it
-    # if save_path is not None:
-    #     if title is None:
-    #         raise ValueError(f"saving requires title but title is {title}")
-    #     fig.savefig(os.path.join(save_path, title))
-    #     plt.close(fig)
-    # else:
-    #     plt.show()
     return fig
 
 
-def plot_video_observations(ax, obs, prefix):
-    ax.matshow(obs, cmap="gray")
-    ax.plot([prefix - 0.5, prefix - 0.5], [-0.5, len(obs)], "r", linewidth=2)
-    ax.axis("off")
-
-
-def plot_latents(latents, prefix, title=None, save_path=None):
+def plot_latents(latents, prefix=None, title=None):
     n_samples, sample_length, n_latents = latents.shape
 
     fig, axs = plt.subplots(1, 1, figsize=(10, 10))
@@ -66,24 +58,17 @@ def plot_latents(latents, prefix, title=None, save_path=None):
         ax_i.plot(latent_i.mean(0), linewidth=2, alpha=0.8)
 
         # plot vertical line for prefix
-        ax_i.plot(
-            [prefix - 0.5, prefix - 0.5],
-            [ax_i.get_ylim()[0], ax_i.get_ylim()[1]],
-            "--",
-            color="r",
-            linewidth=2,
-        )
+        if prefix is not None:
+            ax_i.plot(
+                [prefix - 0.5, prefix - 0.5],
+                [ax_i.get_ylim()[0], ax_i.get_ylim()[1]],
+                "--",
+                color="r",
+                linewidth=2,
+            )
 
     fig.suptitle(title)
     fig.tight_layout()
-    # # save the figure to disk or show it
-    # if save_path is not None:
-    #     if title is None:
-    #         raise ValueError(f"saving requires title but title is {title}")
-    #     fig.savefig(os.path.join(save_path, title))
-    #     plt.close(fig)
-    # else:
-    #     plt.show()
     return fig
 
 
@@ -92,78 +77,41 @@ def plot(
     samples,
     prefix=25,
     title=None,
-    save_path=None,
 ):
     fig, axs = plt.subplots(1, 1, figsize=(20, 10))
     mean_image = samples.mean(0)
     sample_images = np.hstack(samples[:5])
     big_image = np.hstack((obs, mean_image, sample_images))
-    plot_video_observations(axs, big_image.T, prefix)
+    _plot_video_observations(axs, big_image.T, prefix)
 
     fig.suptitle(title)
     fig.tight_layout()
-    # # save the figure to disk or show it
-    # if save_path is not None:
-    #     if title is None:
-    #         raise ValueError(f"saving requires title but title is {title}")
-    #     fig.savefig(os.path.join(save_path, title))
-    #     plt.close(fig)
-    # else:
-    #     plt.show()
     return fig
 
 
-def plot_info_parameters(J11, J12, J22, J21, A, Q, title=None, save_path=None):
+def plot_info_parameters(J11, J12, J22, J21, A, Q, title=None):
+    cmap = "coolwarm"
     fig, axs = plt.subplots(2, 3)
 
-    cmap = "coolwarm"
-    im_J11 = axs[0, 0].matshow(J11.cpu().detach().numpy(), cmap=cmap)
-    im_J12 = axs[0, 1].matshow(J12.cpu().detach().numpy(), cmap=cmap)
-    im_J22 = axs[1, 0].matshow(J22.cpu().detach().numpy(), cmap=cmap)
-    im_J21 = axs[1, 1].matshow(J21.cpu().detach().numpy(), cmap=cmap)
+    def _plot(i, j, mat, title):
+        im = axs[i, j].matshow(mat.cpu().detach().numpy(), cmap=cmap)
+        fig.colorbar(im, ax=axs[i, j])
+        axs[i, j].axis("off")
+        axs[i, j].title.set_text(title)
 
-    im_A = axs[0, 2].matshow(A.cpu().detach().numpy(), cmap=cmap)
-    im_Q = axs[1, 2].matshow(Q.cpu().detach().numpy(), cmap=cmap)
-
-    fig.colorbar(im_J11, ax=axs[0, 0])
-    fig.colorbar(im_J12, ax=axs[0, 1])
-    fig.colorbar(im_J22, ax=axs[1, 0])
-    fig.colorbar(im_J21, ax=axs[1, 1])
-
-    fig.colorbar(im_A, ax=axs[0, 2])
-    fig.colorbar(im_Q, ax=axs[1, 2])
-
-    axs[0, 0].axis("off")
-    axs[0, 1].axis("off")
-    axs[1, 0].axis("off")
-    axs[1, 1].axis("off")
-
-    axs[0, 2].axis("off")
-    axs[1, 2].axis("off")
-
-    axs[0, 0].title.set_text("J11")
-    axs[0, 1].title.set_text("J12")
-    axs[1, 0].title.set_text("J22")
-    axs[1, 1].title.set_text("J21")
-
-    axs[0, 2].title.set_text("A")
-    axs[1, 2].title.set_text("Q")
+    _plot(0, 0, J11, "J11")
+    _plot(0, 1, J12, "J12")
+    _plot(1, 0, J22, "J22")
+    _plot(1, 1, J21, "J21")
+    _plot(0, 2, A, "A")
+    _plot(1, 2, Q, "Q")
 
     fig.suptitle(title)
     fig.tight_layout()
-    # # save the figure to disk or show it
-    # if save_path is not None:
-    #     if title is None:
-    #         raise ValueError(f"saving requires title but title is {title}")
-    #     fig.savefig(os.path.join(save_path, title))
-    #     plt.close(fig)
-    # else:
-    #     plt.show()
     return fig
 
 
-def plot_potentials(potentials, prefix, title=None, save_path=None):
-
+def plot_potentials(potentials, prefix, title=None):
     J, h, _, _ = unpack_dense(potentials)
     J = torch.linalg.diagonal(J)
 
@@ -178,12 +126,22 @@ def plot_potentials(potentials, prefix, title=None, save_path=None):
 
     fig.suptitle(title)
     fig.tight_layout()
-    # # save the figure to disk or show it
-    # if save_path is not None:
-    #     if title is None:
-    #         raise ValueError(f"saving requires title but title is {title}")
-    #     fig.savefig(os.path.join(save_path, title))
-    #     plt.close(fig)
-    # else:
-    #     plt.show()
+    return fig
+
+
+def plot_global(mniw_param):
+    A, B, C, d = mniw_param
+
+    fig, axs = plt.subplots(2, 2, figsize=(20, 20))
+
+    def _plot(i, j, mat, title):
+        im = axs[i, j].matshow(mat.cpu().detach().numpy())
+        fig.colorbar(im, ax=axs[i, j])
+        axs[i, j].title.set_text(title)
+
+    _plot(0, 0, A, "A")
+    _plot(0, 1, B, "B")
+    _plot(1, 0, C, "C")
+    _plot(1, 1, d[None, :], "d")
+
     return fig

@@ -69,7 +69,7 @@ class SVAE:
             self.eta_theta = eta_theta
             self.save_model(epoch)
 
-            data = torch.tensor(obs).to(self.vae.device).float()
+            data = torch.tensor(obs).to(self.vae.device).double()
             potentials = self.encode(data)
 
             x, eta_x, label_stats, _, _ = local_optimization(potentials, eta_theta)
@@ -84,11 +84,9 @@ class SVAE:
             fig = plot_reconstruction(
                 obs=obs,
                 mu=mu_y.squeeze().cpu().detach().numpy(),
-                log_var=log_var_y.squeeze().cpu().detach().numpy(),
                 latent=Ex.cpu().detach().numpy(),
                 eta_theta=eta_theta,
                 classes=torch.argmax(label_stats, dim=-1).cpu().detach().numpy(),
-                title=f"epoch:{epoch}_svae",
             )
 
             wandb.log({"fig": fig})
@@ -128,7 +126,7 @@ class SVAE:
         )
 
         optimizer = torch.optim.Adam(self.vae.parameters(), lr=1e-3, weight_decay=1e-3)
-        global_optmizer = SGDOptim(step_size=10)
+        global_optimizer = SGDOptim(step_size=10)
 
         train_loss = []
         self.save_and_log(obs, "pre", eta_theta)
@@ -136,7 +134,7 @@ class SVAE:
 
             total_loss = []
             for i, y in enumerate(dataloader):
-                y = y.float()
+                y = y.double()
                 potentials = self.encode(y)
 
                 # remove dependency on previous iterations
@@ -145,7 +143,7 @@ class SVAE:
                 """
                 Find local optimum for local variational parameters eta_x, eta_z
                 """
-                x, eta_x, _, prior_stats, local_kld = local_optimization(
+                x, _, _, prior_stats, local_kld = local_optimization(
                     potentials, eta_theta
                 )
 
@@ -159,7 +157,7 @@ class SVAE:
                 # do SGD on the natural gradient
                 eta_theta = tuple(
                     [
-                        global_optmizer.update(eta_theta[i], nat_grad[i])
+                        global_optimizer.update(eta_theta[i], nat_grad[i])
                         for i in range(len(eta_theta))
                     ]
                 )

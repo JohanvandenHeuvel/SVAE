@@ -13,6 +13,7 @@ vae_parameters = {
     "hidden_size": [40],
     "recon_loss": "likelihood",
     "name": "vae",
+    "weight_init_std": 1e-2
 }
 
 svae_parameters = {
@@ -50,7 +51,7 @@ def get_network():
 
 def main():
     # logging
-    wandb.init(project="SVAE_public", config=hyperparameters)
+    wandb.init(project="SVAE_gmm", config=hyperparameters)
     folder_name = make_folder(wandb.run.name)
 
     # get data and vae model
