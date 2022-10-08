@@ -15,7 +15,8 @@ from plot.lds_plot import (
     plot,
     plot_latents,
     plot_info_parameters,
-    plot_potentials, plot_list,
+    plot_potentials,
+    plot_list,
 )
 from seed import SEED
 from svae.gradient import natural_gradient, SGDOptim
@@ -87,13 +88,15 @@ class SVAE:
             log_var_y = torch.tanh(log_var_y / 10) * 10
         return mu_y, log_var_y
 
-    def forward(self, y):
+    def forward(self, y, n_samples=10):
         potentials = self.encode(y)
-        x, _, _ = local_optimization(potentials, self.eta_theta)
-        mu_y, log_var_y = self.decode(x)
-        return mu_y, log_var_y, x
+        x, (E_init_stats, E_pair_stats), local_kld = local_optimization(
+            potentials, self.eta_theta, n_samples=n_samples
+        )
+        mu_y, log_var_y = self.decode(x.reshape(-1, x.shape[-1]))
+        return x, (mu_y, log_var_y), (E_init_stats, E_pair_stats), local_kld
 
-    def save_and_log(self, data, epoch, eta_theta):
+    def save_and_log(self, data, epoch):
         def zero_out(prefix, potentials):
             """Zero out a part of the data.
 
@@ -118,7 +121,7 @@ class SVAE:
             n_samples: int
                 Number of samples.
             """
-            x, _, _ = local_optimization(potentials, eta_theta, n_samples)
+            x, _, _ = local_optimization(potentials, self.eta_theta, n_samples)
             mu_y, log_var_y = self.decode(x.reshape(-1, x.shape[-1]))
 
             mu_y = mu_y.reshape(*x.shape[:-1], -1)
@@ -131,8 +134,7 @@ class SVAE:
             return mu_y, log_var_y, x
 
         with torch.no_grad():
-            self.eta_theta = eta_theta
-            niw_param, mniw_param = eta_theta
+            niw_param, mniw_param = self.eta_theta
             self.save_model(epoch)
 
             J11, J12, J22, _ = MatrixNormalInverseWishart(mniw_param).expected_stats()
@@ -148,9 +150,15 @@ class SVAE:
                     "J22": J22,
                     "A": A,
                     "Q": Q,
-                    "J11_eig": plot_list(torch.linalg.eigvals(J11).cpu().detach().numpy()),
-                    "J12_eig": plot_list(torch.linalg.eigvals(J12).cpu().detach().numpy()),
-                    "J22_eig": plot_list(torch.linalg.eigvals(J22).cpu().detach().numpy()),
+                    "J11_eig": plot_list(
+                        torch.linalg.eigvals(J11).cpu().detach().numpy()
+                    ),
+                    "J12_eig": plot_list(
+                        torch.linalg.eigvals(J12).cpu().detach().numpy()
+                    ),
+                    "J22_eig": plot_list(
+                        torch.linalg.eigvals(J22).cpu().detach().numpy()
+                    ),
                     "A_eig": plot_list(torch.linalg.eigvals(A).cpu().detach().numpy()),
                     "Q_eig": plot_list(torch.linalg.eigvals(Q).cpu().detach().numpy()),
                 }
@@ -209,7 +217,16 @@ class SVAE:
 
             plt.close("all")
 
-    def fit(self, obs, epochs, batch_size, latent_dim, local_kld_weight, global_kld_weight, update_init_params):
+    def fit(
+        self,
+        obs,
+        epochs,
+        batch_size,
+        latent_dim,
+        local_kld_weight,
+        global_kld_weight,
+        update_init_params,
+    ):
         """
         Find the optimum for global variational parameter eta_theta, and encoder/decoder parameters.
 
@@ -247,6 +264,7 @@ class SVAE:
         niw_prior, mniw_prior = initialize_global_lds_parameters(latent_dim)
         niw_param, mniw_param = initialize_global_lds_parameters(latent_dim)
         mniw_prior, mniw_param = list(mniw_prior), list(mniw_param)
+        self.eta_theta = niw_param, mniw_param
 
         """
         Optimizer setup 
@@ -263,31 +281,26 @@ class SVAE:
         """
         Optimization loop 
         """
-        self.save_and_log(data, "pre", (niw_param, mniw_param))
+        self.save_and_log(data, "pre")
         train_loss = []
         for epoch in range(epochs + 1):
             total_loss = []
             for i, y in enumerate(dataloader):
                 y = y.squeeze(0)
-                potentials = self.encode(y)
 
-                # remove dependency on previous iterations
-                niw_param = niw_param.detach()
-                niw_param.requires_grad = True
-                mniw_param = list([p.detach() for p in mniw_param])
-                for p in mniw_param:
-                    p.requires_grad = True
+                (
+                    x,
+                    (mu_y, log_var_y),
+                    (E_init_stats, E_pair_stats),
+                    local_kld,
+                ) = self.forward(y)
 
                 """
                 Find local optimum for local variational parameters eta_x, eta_z
                 """
-                x, (E_init_stats, E_pair_stats), local_kld = local_optimization(
-                    potentials, (niw_param, mniw_param), n_samples=10
-                )
-
                 # regularization
                 global_kld = prior_kld_lds(
-                    (niw_param, mniw_param), (niw_prior, mniw_prior)
+                    self.eta_theta, (niw_prior, mniw_prior)
                 )
 
                 """
@@ -297,18 +310,20 @@ class SVAE:
                 if update_init_params:
                     nat_grad_init = natural_gradient(
                         pack_dense(*E_init_stats)[None, ...],
-                        niw_param,
+                        self.eta_theta[0],
                         niw_prior,
                         len(data),
                         num_batches,
                     )
-                    niw_param = niw_optimizer.update(niw_param, torch.stack(nat_grad_init))
+                    niw_param = niw_optimizer.update(
+                        niw_param, torch.stack(nat_grad_init)
+                    )
 
                 nat_grad_pair = natural_gradient(
-                    E_pair_stats, mniw_param, mniw_prior, len(data), num_batches
+                    E_pair_stats, self.eta_theta[1], mniw_prior, len(data), num_batches
                 )
                 mniw_param = [
-                    mniw_optimizer[i].update(mniw_param[i], nat_grad_pair[i])
+                    mniw_optimizer[i].update(self.eta_theta[1][i], nat_grad_pair[i])
                     for i in range(len(nat_grad_pair))
                 ]
 
@@ -329,7 +344,6 @@ class SVAE:
                 Update encoder/decoder parameters using automatic differentiation
                 """
                 # reconstruction loss
-                mu_y, log_var_y = self.decode(x.reshape(-1, x.shape[-1]))
                 recon_loss = (
                     self.vae.loss_function(
                         y[:, None, :],
@@ -354,6 +368,14 @@ class SVAE:
                 # update parameters
                 optimizer.step()
 
+                # remove dependency on previous iterations
+                niw_param = niw_param.detach()
+                niw_param.requires_grad = True
+                mniw_param = list([p.detach() for p in mniw_param])
+                for p in mniw_param:
+                    p.requires_grad = True
+                self.eta_theta = niw_param, mniw_param
+
                 wandb.log(
                     {
                         "recon_loss": recon_loss,
@@ -373,7 +395,7 @@ class SVAE:
 
             print(f"[{epoch}/{epochs + 1}] {train_loss[-1].sum()}")
             if epoch % max((epochs // 20), 1) == 0 or True:
-                self.save_and_log(data, epoch, (niw_param, mniw_param))
+                self.save_and_log(data, epoch)
 
         print("Finished training of the SVAE")
-        self.save_and_log(data, "end", (niw_param, mniw_param))
+        self.save_and_log(data, "end")

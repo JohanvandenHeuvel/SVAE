@@ -111,3 +111,10 @@ def standard_pair_params(J11, J12, J22):
     Q = torch.inverse(J22)
     A = -(J12 @ Q).T
     return A, Q
+
+
+def info_pair_params(A, Q):
+    J22 = torch.inverse(Q)
+    J12 = -A.T @ J22
+    J11 = A.T @ J22 @ A
+    return J11, J12, J22
