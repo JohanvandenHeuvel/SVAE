@@ -4,11 +4,10 @@ import pathlib
 import numpy as np
 import torch
 import torch.nn as nn
+import wandb
 from torch.nn import functional as F
-from tqdm import tqdm
 
 from plot.gmm_plot import plot_reconstruction
-
 from .autoencoder import Autoencoder
 
 
@@ -20,9 +19,9 @@ def init_weights(l, std=1e-2):
     Parameters
     ----------
     l: torch.nn.Module
-        layer to initialize.
+        Layer to initialize.
     std: float
-        standard deviation for weight initialization
+        Standard deviation for weight initialization.
 
     Returns
     -------
@@ -53,14 +52,14 @@ def rand_partial_isometry(m, n):
 
 
 def reparameterize(mu, log_var):
-    """reparameterization trick for Gaussian"""
+    """Re-parameterization trick for Gaussian."""
     std = torch.exp(0.5 * log_var)
     eps = torch.randn_like(std)
     return eps * std + mu
 
 
 def kld(mu_z, log_var_z):
-    """Kullback-Leibler divergence for Gaussian"""
+    """Kullback-Leibler divergence for Gaussian."""
     value = torch.mean(
         -0.5 * torch.sum(1 + log_var_z - mu_z**2 - log_var_z.exp(), dim=1), dim=0
     )
@@ -76,6 +75,7 @@ class VAE(Autoencoder):
         weight_init_std,
         name="vae",
         recon_loss="MSE",
+        save_path=None,
     ):
         super().__init__(name)
         self.recon_loss = recon_loss
@@ -96,6 +96,7 @@ class VAE(Autoencoder):
             encoder, nn.Linear(encoder_layers[-1], latent_dim)
         )
 
+        # initialize weights
         self.mu_enc.apply(lambda l: init_weights(l, weight_init_std))
         self.log_var_enc.apply(lambda l: init_weights(l, weight_init_std))
 
@@ -115,12 +116,22 @@ class VAE(Autoencoder):
             decoder, nn.Linear(decoder_layers[-1], input_size)
         )
 
+        # initialize weights
         self.mu_dec.apply(lambda l: init_weights(l, weight_init_std))
         self.log_var_dec.apply(lambda l: init_weights(l, weight_init_std))
 
+        """
+        MISC 
+        """
+        # sent to device
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.to(self.device)
         self.double()
+
+        # save path
+        self.save_path = save_path
+        if save_path is not None:
+            os.mkdir(save_path)
 
     def encode(self, x):
         return self.mu_enc(x), self.log_var_enc(x)
@@ -145,38 +156,40 @@ class VAE(Autoencoder):
             raise ValueError(f"Loss function {self.recon_loss} not recognized!")
         return recon_loss
 
-    def save_and_log(self, obs):
-        data = torch.tensor(obs).to(self.device).float()
-        mu_z, log_var_z = self.encode(data)
-        z = reparameterize(mu_z, log_var_z)
+    def save_and_log(self, obs, epoch):
+        with torch.no_grad():
+            path = self.save_path
+            self.save_model(path, epoch)
 
-        mu_x, log_var_x = self.decode(z)
-        plot_reconstruction(
-            obs,
-            mu_x.cpu().detach().numpy(),
-            z.cpu().detach().numpy(),
-        )
+            data = torch.tensor(obs).to(self.device).double()
 
-    def fit(
-        self, obs, epochs, batch_size, kld_weight, save_path=None, force_train=False
-    ):
+            mu_z, log_var_z = self.encode(data)
+            z = reparameterize(mu_z, log_var_z)
+            mu_x, log_var_x = self.decode(z)
+
+            fig = plot_reconstruction(
+                obs=obs,
+                mu=mu_x.cpu().detach().numpy(),
+                latent=z.cpu().detach().numpy(),
+            )
+
+            wandb.log({"fig": fig})
+
+    def fit(self, obs, epochs, batch_size, kld_weight, force_train=False):
         """Fit auto-encoder model"""
 
         # Load model if it exists on disk
-        if (
-            os.path.exists(os.path.join(pathlib.Path().resolve(), f"{self.name}.pt"))
-            and not force_train
-        ):
+        exists = os.path.exists(
+            os.path.join(pathlib.Path().resolve(), f"{self.name}.pt")
+        )
+        if exists and not force_train:
             self.load_model()
-            return 0
-
-        if save_path is not None:
-            os.mkdir(save_path)
+            return
 
         # Make data object
-        # data = torch.tensor(obs).to(self.device)
+        data = torch.tensor(obs).to(self.device)
         train_loader = torch.utils.data.DataLoader(
-            obs, batch_size=batch_size, shuffle=True
+            data, batch_size=batch_size, shuffle=True
         )
 
         # Create optimizer
@@ -184,10 +197,11 @@ class VAE(Autoencoder):
 
         # Start outer training loop, each iter one pass over the whole dataset
         train_loss = []
-        for epoch in tqdm(range(epochs)):
+        self.save_and_log(obs, "pre")
+        for epoch in range(epochs):
             # Start inner training loop, each iter one pass over a single batch
             total_loss = []
-            for obs_batch, _ in train_loader:
+            for obs_batch in train_loader:
                 obs_batch = obs_batch.double()
 
                 # get values from the model
@@ -206,11 +220,14 @@ class VAE(Autoencoder):
                 # update parameters
                 optimizer.step()
 
+                wandb.log({"recon_loss": recon_loss, "kld": kld_weight * kld_loss})
+
                 total_loss.append((recon_loss.item(), kld_loss.item()))
             train_loss.append(np.mean(total_loss, axis=0))
 
-            if epoch % (epochs // 10) == 0:
-                self.save_and_log(obs)
+            print(f"[{epoch}/{epochs + 1}] {train_loss[-1].sum()}")
+            if epoch % max((epochs // 10), 1) == 0:
+                self.save_and_log(obs, epoch)
 
-        self.save_model()
-        return train_loss
+        print("Finished training of the VAE")
+        self.save_and_log(obs, "end")

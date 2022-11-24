@@ -21,6 +21,7 @@ class resVAE(VAE):
         weight_init_std,
         name="resvae",
         recon_loss="MSE",
+        save_path=None,
     ):
         super().__init__(
             input_size=input_size,
@@ -29,6 +30,7 @@ class resVAE(VAE):
             name=name,
             weight_init_std=weight_init_std,
             recon_loss=recon_loss,
+            save_path=save_path,
         )
 
         """
@@ -95,6 +97,9 @@ class resVAE(VAE):
         self.mu_dec = AddModule(mu_dec, mu_dec_identity)
         self.log_var_dec = AddModule(log_var_dec, log_var_dec_identity)
 
+        """
+        MISC 
+        """
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.to(self.device)
         self.double()
