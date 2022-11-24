@@ -13,7 +13,7 @@ vae_parameters = {
     "input_size": 2,
     "hidden_size": [40],
     "recon_loss": "likelihood",
-    "name": "vae",
+    "name": "resvae",
     "weight_init_std": 1e-2,
 }
 
@@ -21,9 +21,9 @@ vae_parameters = {
 svae_parameters = {
     "K": 15,
     "batch_size": 50,
-    "epochs": 1000,
+    "epochs": 250,
     "kld_weight": 0.35,
-}
+}   
 
 # parameters for generating synthetic data
 data_parameters = {
@@ -60,7 +60,7 @@ def get_network():
 
 def main():
     # logging
-    wandb.init(project="SVAE_gmm", config=hyperparameters)
+    wandb.init(project="test", config=hyperparameters)
     folder_name = make_folder(wandb.run.name)
 
     # get data and vae model
