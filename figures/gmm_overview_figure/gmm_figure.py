@@ -165,7 +165,7 @@ def generate_gmm():
 
         fig.update_yaxes(title="y", visible=False, showticklabels=False)
         fig.update_xaxes(title="x", visible=False, showticklabels=False)
-        plotly.io.write_image(fig, "../gmm.pdf", format="pdf")
+        plotly.io.write_image(fig, "gmm.pdf", format="pdf")
         return fig
 
     n_clusters = 15
