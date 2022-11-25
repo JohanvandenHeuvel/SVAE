@@ -156,10 +156,10 @@ class VAE(Autoencoder):
             raise ValueError(f"Loss function {self.recon_loss} not recognized!")
         return recon_loss
 
-    def save_and_log(self, obs, epoch):
+    def save_and_log(self, obs, step):
         with torch.no_grad():
             path = self.save_path
-            self.save_model(path, epoch)
+            self.save_model(path, step)
 
             data = torch.tensor(obs).to(self.device).double()
 
@@ -171,11 +171,12 @@ class VAE(Autoencoder):
                 obs=obs,
                 mu=mu_x.cpu().detach().numpy(),
                 latent=z.cpu().detach().numpy(),
+                title=f"{step=}",
             )
 
             wandb.log({"fig": fig})
 
-    def fit(self, obs, epochs, batch_size, kld_weight, force_train=False):
+    def fit(self, obs, epochs, batch_size, kld_weight, force_train=False, verbose=True):
         """Fit auto-encoder model"""
 
         # Load model if it exists on disk
@@ -186,6 +187,7 @@ class VAE(Autoencoder):
             self.load_model()
             return
 
+        print("Training the VAE...")
         # Make data object
         data = torch.tensor(obs).to(self.device)
         train_loader = torch.utils.data.DataLoader(
@@ -197,7 +199,8 @@ class VAE(Autoencoder):
 
         # Start outer training loop, each iter one pass over the whole dataset
         train_loss = []
-        self.save_and_log(obs, "pre")
+        if verbose:
+            self.save_and_log(obs, "pre")
         for epoch in range(epochs):
             # Start inner training loop, each iter one pass over a single batch
             total_loss = []
@@ -225,9 +228,11 @@ class VAE(Autoencoder):
                 total_loss.append((recon_loss.item(), kld_loss.item()))
             train_loss.append(np.mean(total_loss, axis=0))
 
-            print(f"[{epoch}/{epochs + 1}] {train_loss[-1].sum()}")
-            if epoch % max((epochs // 10), 1) == 0:
-                self.save_and_log(obs, epoch)
+            if verbose:
+                if epoch % max((epochs // 10), 1) == 0:
+                    print(f"[{epoch}/{epochs + 1}] {train_loss[-1].sum()=}")
+                    self.save_and_log(obs, epoch)
 
         print("Finished training of the VAE")
-        self.save_and_log(obs, "end")
+        if verbose:
+            self.save_and_log(obs, "end")

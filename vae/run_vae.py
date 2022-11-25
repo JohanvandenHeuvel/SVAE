@@ -4,7 +4,7 @@ import wandb
 
 from data import make_pinwheel_data
 from log import make_folder
-from models import VAE, resVAE
+from vae import VAE, resVAE
 
 data_parameters = {
     "radial_std": 0.3,
