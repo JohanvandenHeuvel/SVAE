@@ -4,9 +4,7 @@ import numpy as np
 import torch
 
 from distributions import MatrixNormalInverseWishart, NormalInverseWishart
-from distributions.gaussian import (
-    natural_to_info,
-)
+from distributions.gaussian import natural_to_info
 from matrix_ops import pack_dense
 from seed import SEED
 from svae.lds.kalman import info_kalman_filter, info_kalman_smoothing

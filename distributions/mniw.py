@@ -14,6 +14,15 @@ def sample(M, K, Phi, nu):
     return A, Sigma
 
 
+def standard_to_natural(nu, Phi, M, K):
+    K_inv = torch.linalg.inv(K)
+    A = K_inv
+    B = torch.matmul(K_inv, M.T)
+    C = Phi + torch.matmul(M, B)
+    d = nu
+    return A, B, C, d
+
+
 class MatrixNormalInverseWishart(ExpDistribution):
     def __init__(self, nat_param: torch.Tensor):
         super().__init__(nat_param)
@@ -80,14 +89,6 @@ class MatrixNormalInverseWishart(ExpDistribution):
         M = torch.matmul(K, B).T
         Phi = C - torch.matmul(M, B)
         return K, M, Phi, nu
-
-    def standard_to_natural(self, nu, Phi, M, K):
-        K_inv = torch.linalg.inv(K)
-        A = K_inv
-        B = torch.matmul(K_inv, M.T)
-        C = Phi + torch.matmul(M, B)
-        d = nu
-        return A, B, C, d
 
     def sample(self):
         K, M, Phi, nu = self.natural_to_standard()

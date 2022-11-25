@@ -1,6 +1,7 @@
 import torch
 
 from distributions import NormalInverseWishart, MatrixNormalInverseWishart, exponential_kld
+from distributions.mniw import standard_to_natural
 
 
 def initialize_global_lds_parameters(n, scale=1.0):
@@ -17,9 +18,7 @@ def initialize_global_lds_parameters(n, scale=1.0):
     init_state_prior = NormalInverseWishart(torch.zeros_like(nu)).standard_to_natural(
         kappa.unsqueeze(0), mu_0.unsqueeze(0), Phi.unsqueeze(0), nu.unsqueeze(0)
     )
-    dynamics_prior = MatrixNormalInverseWishart(
-        torch.zeros_like(nu)
-    ).standard_to_natural(nu, Phi, M, K)
+    dynamics_prior = standard_to_natural(nu, Phi, M, K)
 
     dynamics_prior = tuple([d.to(device).double() for d in dynamics_prior])
 
