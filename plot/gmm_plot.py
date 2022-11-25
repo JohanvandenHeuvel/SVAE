@@ -1,11 +1,14 @@
 import matplotlib.pyplot as plt
 import numpy as np
+import plotly
 import plotly.express as px
 import plotly.graph_objects as go
 import torch
 from plotly.subplots import make_subplots
 
 from distributions import Dirichlet, NormalInverseWishart, Gaussian
+
+import time
 
 cm = plt.get_cmap("tab20")
 
@@ -81,6 +84,7 @@ def plot_reconstruction(
     latent=None,
     eta_theta=None,
     classes=None,
+    title="",
 ):
     """
 
@@ -96,8 +100,21 @@ def plot_reconstruction(
         Parameters for clusters in latent space.
     classes:
         Cluster assignment for the data-points.
+    title:
+        Title of the plot.
     """
-    fig = make_subplots(rows=1, cols=2, subplot_titles=("Latent", "Observation"))
+
+    n_col = (latent is not None) + (obs is not None)
+    assert n_col == 1 or n_col == 2
+
+    fig = make_subplots(rows=1, cols=n_col, subplot_titles=("Latent", "Observation") if n_col == 2 else None)
+    fig.update_layout(
+        showlegend=False,
+        autosize=False,
+        width=800,
+        height=800,
+        margin=dict(l=0, r=0, b=0, t=0, pad=0),
+    )
 
     """
     plot the latent dimension in the left plot
@@ -116,7 +133,7 @@ def plot_reconstruction(
     """
     if obs is not None:
         x, y = zip(*obs)
-        fig.add_trace(go.Scatter(x=x, y=y, mode="markers", name="obs"), row=1, col=2)
+        fig.add_trace(go.Scatter(x=x, y=y, mode="markers", name="obs"), row=1, col=n_col)
 
     if mu is not None:
         x, y = zip(*mu)
@@ -126,9 +143,22 @@ def plot_reconstruction(
                 y=y,
                 mode="markers",
                 name="recon",
-                marker={"color": [px.colors.qualitative.Alphabet[i] for i in classes]},
+                marker={
+                    "color": [px.colors.qualitative.Alphabet[i] for i in classes] if classes is not None else None
+                },
             ),
             row=1,
-            col=2,
+            col=n_col,
         )
+
+    # remove axes
+    fig.update_yaxes(title="y", visible=False, showticklabels=False)
+    fig.update_xaxes(title="x", visible=False, showticklabels=False)
+
+    # save to file
+    # see https://github.com/plotly/plotly.py/issues/3469
+    plotly.io.write_image(fig, f"{title}.pdf", format="pdf")
+    time.sleep(2)
+    plotly.io.write_image(fig, f"{title}.pdf", format="pdf")
+    print(f"save plot to {title}.pdf")
     return fig
