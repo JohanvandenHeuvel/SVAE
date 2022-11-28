@@ -1,9 +1,12 @@
-import os
+import plotly.express as px
+from plotly.subplots import make_subplots
+import plotly.graph_objs as go
 
 import matplotlib.pyplot as plt
 import numpy as np
 import torch.linalg
 
+from distributions import MatrixNormalInverseWishart
 from matrix_ops import unpack_dense
 
 
@@ -146,3 +149,18 @@ def plot_global(mniw_param, title=None, figsize=(10, 10)):
     fig.suptitle(title)
     fig.tight_layout()
     return fig
+
+
+def plot_standard_params_Sigma(mniw_param):
+    K, M, Phi, nu = MatrixNormalInverseWishart(mniw_param).natural_to_standard()
+
+    # get vectorized form
+    Sigma = torch.kron(K.contiguous(), Phi)
+
+    return px.imshow(Sigma.cpu().detach().numpy())
+
+
+def plot_standard_params_mu(mniw_param):
+    K, M, Phi, nu = MatrixNormalInverseWishart(mniw_param).natural_to_standard()
+
+    return px.imshow(M.cpu().detach().numpy())
