@@ -23,7 +23,7 @@ svae_parameters = {
     "batch_size": 50,
     "epochs": 250,
     "kld_weight": 0.35,
-}   
+}
 
 # parameters for generating synthetic data
 data_parameters = {

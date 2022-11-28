@@ -67,7 +67,9 @@ class SVAE:
     def save_and_log(self, obs, epoch, eta_theta):
         with torch.no_grad():
             self.eta_theta = eta_theta
-            self.save_model(epoch)
+
+            if self.save_path is not None:
+                self.save_model(epoch)
 
             data = torch.tensor(obs).to(self.vae.device).double()
             potentials = self.encode(data)
@@ -91,7 +93,7 @@ class SVAE:
 
             wandb.log({"fig": fig})
 
-    def fit(self, obs, epochs, batch_size, K, kld_weight):
+    def fit(self, obs, epochs, batch_size, K, kld_weight, train=True, verbose=True):
         """
         Find the optimum for global variational parameter eta_theta, and encoder/decoder parameters.
 
@@ -108,7 +110,7 @@ class SVAE:
         kld_weight:
             Weight for the KLD in the loss.
         """
-        print("Training the SVAE ...")
+        print("Training the SVAE...")
 
         # Make data object
         data = torch.tensor(obs).to(self.vae.device)
@@ -129,7 +131,9 @@ class SVAE:
         global_optimizer = SGDOptim(step_size=10)
 
         train_loss = []
-        self.save_and_log(obs, "pre", eta_theta)
+        if verbose:
+            self.save_and_log(obs, "pre", eta_theta)
+
         for epoch in range(epochs + 1):
 
             total_loss = []
@@ -187,9 +191,13 @@ class SVAE:
                 total_loss.append((recon_loss.item(), kld_weight * kld_loss.item()))
             train_loss.append(np.mean(total_loss, axis=0))
 
-            print(f"[{epoch}/{epochs + 1}] {train_loss[-1].sum()}")
-            if epoch % max((epochs // 10), 1) == 0:
-                self.save_and_log(obs, epoch, eta_theta)
+            if verbose:
+                if epoch % max((epochs // 10), 1) == 0:
+                    print(f"[{epoch}/{epochs + 1}] {train_loss[-1].sum()}")
+                    self.save_and_log(obs, epoch, eta_theta)
 
         print("Finished training of the SVAE")
-        self.save_and_log(obs, "end", eta_theta)
+        # TODO otherwise if verbose == False this is not set correctly
+        self.eta_theta = eta_theta
+        if verbose:
+            self.save_and_log(obs, "end", eta_theta)
