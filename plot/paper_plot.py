@@ -1,3 +1,6 @@
+"""
+File for parameter search
+"""
 import torch
 
 from distributions import MatrixNormalInverseWishart
