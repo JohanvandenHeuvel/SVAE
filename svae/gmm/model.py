@@ -33,10 +33,11 @@ class SVAE:
         path = self.save_path
 
         # network
-        self.vae.save_model(path, epoch)
+        self.vae.save_model(path, epoch, verbose=True)
 
         # global parameters
         torch.save(self.eta_theta, os.path.join(path, f"eta_theta_{epoch}.pt"))
+
 
     def load_model(self, path, epoch):
         """load model from disk"""

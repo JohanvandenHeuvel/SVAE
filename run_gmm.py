@@ -21,7 +21,7 @@ vae_parameters = {
 svae_parameters = {
     "K": 15,
     "batch_size": 50,
-    "epochs": 250,
+    "epochs": 1000,
     "kld_weight": 0.35,
 }
 
@@ -60,7 +60,7 @@ def get_network():
 
 def main():
     # logging
-    wandb.init(project="test", config=hyperparameters)
+    wandb.init(project="test", mode="disabled", config=hyperparameters)
     folder_name = make_folder(wandb.run.name)
 
     # get data and vae model

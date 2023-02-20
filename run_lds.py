@@ -56,9 +56,9 @@ hyperparameters = {
 }
 
 
-def get_data():
+def get_data(data_parameters):
     # generate synthetic data
-    data = make_dot_data(**hyperparameters["data_parameters"])
+    data = make_dot_data(**data_parameters)
     return data
 
 
@@ -74,11 +74,11 @@ def get_network():
 
 def main():
     # logging
-    wandb.init(project="SVAE_lds", config=hyperparameters)
+    wandb.init(project="SVAE_lds", mode="disabled", config=hyperparameters)
     folder_name = make_folder(wandb.run.name)
 
     # get data and vae model
-    observations = get_data()
+    observations = get_data(hyperparameters["data_parameters"])
     network = get_network()
 
     # SVAE model

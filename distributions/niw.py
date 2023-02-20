@@ -1,4 +1,5 @@
 import torch
+from scipy.stats import invwishart, multivariate_normal
 
 from matrix_ops import (
     pack_dense,
@@ -7,10 +8,6 @@ from matrix_ops import (
     batch_elementwise_multiplication,
 )
 from .distribution import ExpDistribution
-from distributions import MatrixNormalInverseWishart
-
-from scipy.stats import invwishart, multivariate_normal
-
 from .mniw import multidigamma
 
 
@@ -69,22 +66,7 @@ class NormalInverseWishart(ExpDistribution):
             - multidigamma(nu / 2, p)
         )
 
-        # assert torch.all(torch.linalg.eigvalsh((-2 * E_T2).squeeze()) >= 0.0)
-
         return pack_dense(E_T2, E_T3, E_T4, E_T1).squeeze()
-
-        # A, b, c, d = unpack_dense(self.nat_param)
-        # # TODO Phi (S) and K are mixed up?
-        # mniw = MatrixNormalInverseWishart(
-        #     [
-        #         A.squeeze(),
-        #         b.squeeze().unsqueeze(-1),
-        #         torch.tensor([[c]], device=self.device),
-        #         d,
-        #     ]
-        # )
-        # stats = mniw.expected_stats()
-        # return pack_dense(stats[0], stats[1].squeeze(), stats[2].squeeze(), stats[3])
 
     def logZ(self):
         kappa, mu_0, Phi, nu = self.natural_to_standard()
@@ -96,16 +78,6 @@ class NormalInverseWishart(ExpDistribution):
             - p / 2 * torch.log(kappa)
         )
         return torch.sum(value)
-        # A, b, c, d = unpack_dense(self.nat_param)
-        # mniw = MatrixNormalInverseWishart(
-        #     [
-        #         A.squeeze(),
-        #         b.squeeze().unsqueeze(-1),
-        #         torch.tensor([[c]], device=self.device),
-        #         d,
-        #     ]
-        # )
-        # return mniw.logZ()
 
     def natural_to_standard(self):
         eta_2, eta_3, eta_4, eta_1 = unpack_dense(self.nat_param)
@@ -115,11 +87,7 @@ class NormalInverseWishart(ExpDistribution):
         kappa = eta_4
         mu_0 = eta_3 / eta_4[..., None]
         Phi = eta_2 - batch_outer_product(eta_3, eta_3) / eta_4[..., None, None]
-        # nu = eta_1 - p - 2
         nu = eta_1
-
-        # assert torch.allclose(Phi.squeeze(), Phi.squeeze().T, atol=1e-6)
-        # assert torch.all(torch.linalg.eigvalsh(Phi.squeeze()) >= 0.0)
 
         return kappa, mu_0, Phi, nu
 
@@ -132,8 +100,7 @@ class NormalInverseWishart(ExpDistribution):
         if not is_batch(kappa):
             kappa = make_batch(kappa)
 
-        # TODO why is 1/kappa used here?
-        k = 1 / kappa
+        k = kappa
 
         eta_2 = Phi + batch_elementwise_multiplication(
             k, batch_outer_product(mu_0, mu_0)

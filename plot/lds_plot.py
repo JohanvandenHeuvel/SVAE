@@ -14,33 +14,20 @@ def plot_list(l):
     return fig
 
 
-def plot_observations(obs, samples, variance, title="plot"):
-    N = obs.shape[-1]
-    fig, axs = plt.subplots(N, 1, figsize=(10, N * 4))
-
-    x = np.linspace(0, 100, 100)
-    for n in range(N):
-        ax = axs[n]
-        ax.plot(obs[:, n], label="observed", alpha=0.8)
-        ax.plot(
-            samples[:, n],
-            linestyle="dashed",
-            label="sampled",
-            alpha=0.8,
-        )
-        ax.fill_between(
-            x, obs[:, n] - variance[:, n], obs[:, n] + variance[:, n], alpha=0.1
-        )
-        ax.legend()
-        ax.set_xlabel("time")
-        ax.set_ylabel("obs y")
-
+def plot_observations(obs, title=None, figsize=(10, 10), xrange=None):
+    """Plot the observations."""
+    fig, ax = plt.subplots(1, 1, figsize=figsize)
+    ax.imshow(obs.T, cmap="gray")
+    ax.axis("tight")
+    if xrange is not None:
+        ax.set_xlim(xrange)
+    # ax.axis("off")
     fig.suptitle(title)
     fig.tight_layout()
     return fig
 
 
-def plot_latents(latents, prefix=None, title=None, figsize=(10, 10)):
+def plot_latents(latents, prefix=None, title=None, figsize=(10, 10), xrange=None):
     n_samples, sample_length, n_latents = latents.shape
 
     fig, axs = plt.subplots(1, 1, figsize=figsize)
@@ -60,6 +47,9 @@ def plot_latents(latents, prefix=None, title=None, figsize=(10, 10)):
                 color="r",
                 linewidth=2,
             )
+
+    if xrange is not None:
+        axs.set_xlim(xrange)
 
     fig.suptitle(title)
     fig.tight_layout()
@@ -91,14 +81,16 @@ def plot(
     title=None,
 ):
     def plot_video(ax, obs, prefix):
-        ax.matshow(obs, cmap="gray")
+        ax.matshow(obs, cmap="gray", aspect="auto")
         ax.plot([prefix - 0.5, prefix - 0.5], [-0.5, len(obs)], "r", linewidth=2)
         ax.axis("off")
 
-    fig, axs = plt.subplots(1, 1, figsize=(20, 10))
+    fig, axs = plt.subplots(1, 1, figsize=(30, 10))
     mean_image = samples.mean(0)
     sample_images = np.hstack(samples[:5])
-    big_image = np.hstack((obs, mean_image, sample_images))
+    # big_image = np.hstack((obs, mean_image, sample_images))
+    big_image = sample_images
+    # big_image = np.hstack((obs, mean_image))
     plot_video(axs, big_image.T, prefix)
 
     fig.suptitle(title)

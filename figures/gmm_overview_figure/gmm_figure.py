@@ -63,7 +63,7 @@ import wandb
 from plotly.subplots import make_subplots
 
 from GMM import GMM
-from plot.gmm_plot import plot_reconstruction
+from plot.gmm_plot import plot_observed_space
 from run_gmm import get_data, get_network
 from run_gmm import hyperparameters as gmm_hyperparameters
 from svae.gmm import SVAE
@@ -175,20 +175,16 @@ def generate_gmm():
     # Training the GMM using EM
     observations = get_data()
 
-    # Initialize EM algo with data
+    # Initialize EM algorithm with data
     gmm.init_em(observations)
     num_iters = 30
-    # Saving log-likelihood
-    # log_likelihood = [gmm.log_likelihood(observations)]
+
     # plotting
     for e in range(num_iters):
         # E-step
         gmm.e_step()
         # M-step
         gmm.m_step()
-        # Computing log-likelihood
-        # log_likelihood.append(gmm.log_likelihood(observations))
-        # print("Iteration: {}, log-likelihood: {:.4f}".format(e + 1, log_likelihood[-1]))
         # plotting
         plot_reconstruction(title="Iteration: " + str(e + 1))
     print(f"save plot to gmm.pdf")
@@ -209,7 +205,7 @@ def generate_vae():
         torch.tensor(observations).double()
     )
 
-    plot_reconstruction(
+    plot_observed_space(
         obs=observations,
         mu=mu_x.detach().numpy(),
         title="VAE",
@@ -230,7 +226,7 @@ def generate_svae():
     # get predictions
     mu_y, log_var_y, _, classes = model.forward(torch.tensor(observations).double())
 
-    plot_reconstruction(
+    plot_observed_space(
         obs=observations,
         mu=mu_y.squeeze().detach().numpy(),
         classes=classes,
@@ -245,6 +241,7 @@ if __name__ == "__main__":
     try:
         generate_gmm()
     except np.linalg.LinAlgError:
+        # sometimes the covariance matrix is not invertible
         print("GMM failed")
         pass
     generate_vae()

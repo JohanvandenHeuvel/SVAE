@@ -1,16 +1,14 @@
 import matplotlib.pyplot as plt
 import numpy as np
-import plotly
 import plotly.express as px
 import plotly.graph_objects as go
 import torch
-from plotly.subplots import make_subplots
 
 from distributions import Dirichlet, NormalInverseWishart, Gaussian
 
-import time
-
 cm = plt.get_cmap("tab20")
+
+from .plotly import save_plotly_figure, single_plotly_figure, dual_plotly_figure
 
 
 def _plot_clusters(eta_theta):
@@ -78,13 +76,107 @@ def _plot_clusters(eta_theta):
     return plots
 
 
+def _plot_observed_space(fig, row, col, obs=None, mu=None, classes=None):
+    if obs is not None:
+        x, y = zip(*obs)
+        fig.add_trace(
+            go.Scatter(x=x, y=y, mode="markers", name="obs"), row=row, col=col
+        )
+
+    if mu is not None:
+        x, y = zip(*mu)
+
+        # set color of the data-points
+        marker_color = None
+        if classes is not None:
+            marker_color = [px.colors.qualitative.Alphabet[i] for i in classes]
+
+        fig.add_trace(
+            go.Scatter(
+                x=x, y=y, mode="markers", name="recon", marker={"color": marker_color}
+            ),
+            row=row,
+            col=col,
+        )
+
+
+def plot_observed_space(
+    obs=None,
+    mu=None,
+    classes=None,
+    title=None,
+    y_axes=None,
+    x_axes=None,
+):
+    """
+
+    Parameters
+    ----------
+    obs:
+        Original observations.
+    mu:
+        Reconstructions of the observations.
+    classes:
+        Cluster assignment for the data-points.
+    title:
+        Title of the plot.
+    y_axes:
+        None to disable y-axis, else y-axis range [a, b].
+    x_axes:
+        None to disable x-axis, else x-axis range [a, b].
+    """
+    fig = single_plotly_figure(x_axes, y_axes)
+    _plot_observed_space(fig, 1, 1, obs, mu, classes)
+    return save_plotly_figure(fig, title)
+
+
+def _plot_latent_space(fig, row, col, latent=None, eta_theta=None):
+    if latent is not None:
+        x, y = zip(*latent)
+        fig.add_trace(
+            go.Scatter(x=x, y=y, mode="markers", name="latent"), row=row, col=col
+        )
+
+    if eta_theta is not None:
+        plots = _plot_clusters(eta_theta)
+        for i, plot in enumerate(plots):
+            fig.add_trace(plot, row=row, col=col)
+
+
+def plot_latent_space(
+    latent=None,
+    eta_theta=None,
+    title=None,
+    y_axes=None,
+    x_axes=None,
+):
+    """
+
+    Parameters
+    ----------
+    latent:
+        Latent representation of the observations.
+    eta_theta:
+        Parameters for clusters in latent space.
+    title:
+        Title of the plot.
+    y_axes:
+        None to disable y-axis, else y-axis range [a, b].
+    x_axes:
+        None to disable x-axis, else x-axis range [a, b].
+    """
+    fig = single_plotly_figure(x_axes, y_axes)
+    _plot_latent_space(fig, 1, 1, latent, eta_theta)
+    return save_plotly_figure(fig, title)
+
+
 def plot_reconstruction(
     obs=None,
     mu=None,
     latent=None,
     eta_theta=None,
     classes=None,
-    title="",
+    title="plot",
 ):
     """
 
@@ -104,61 +196,10 @@ def plot_reconstruction(
         Title of the plot.
     """
 
-    n_col = (latent is not None) + (obs is not None)
+    n_col = (latent is not None) + (obs is not None or mu is not None)
     assert n_col == 1 or n_col == 2
 
-    fig = make_subplots(rows=1, cols=n_col, subplot_titles=("Latent", "Observation") if n_col == 2 else None)
-    fig.update_layout(
-        showlegend=False,
-        autosize=False,
-        width=800,
-        height=800,
-        margin=dict(l=0, r=0, b=0, t=0, pad=0),
-    )
-
-    """
-    plot the latent dimension in the left plot
-    """
-    if latent is not None:
-        x, y = zip(*latent)
-        fig.add_trace(go.Scatter(x=x, y=y, mode="markers", name="latent"), row=1, col=1)
-
-    if eta_theta is not None:
-        plots = _plot_clusters(eta_theta)
-        for i, plot in enumerate(plots):
-            fig.add_trace(plot, row=1, col=1)
-
-    """
-    plot the observations in the right plot
-    """
-    if obs is not None:
-        x, y = zip(*obs)
-        fig.add_trace(go.Scatter(x=x, y=y, mode="markers", name="obs"), row=1, col=n_col)
-
-    if mu is not None:
-        x, y = zip(*mu)
-        fig.add_trace(
-            go.Scatter(
-                x=x,
-                y=y,
-                mode="markers",
-                name="recon",
-                marker={
-                    "color": [px.colors.qualitative.Alphabet[i] for i in classes] if classes is not None else None
-                },
-            ),
-            row=1,
-            col=n_col,
-        )
-
-    # remove axes
-    fig.update_yaxes(title="y", visible=False, showticklabels=False)
-    fig.update_xaxes(title="x", visible=False, showticklabels=False)
-
-    # save to file
-    # see https://github.com/plotly/plotly.py/issues/3469
-    plotly.io.write_image(fig, f"{title}.pdf", format="pdf")
-    time.sleep(2)
-    plotly.io.write_image(fig, f"{title}.pdf", format="pdf")
-    print(f"save plot to {title}.pdf")
-    return fig
+    fig = dual_plotly_figure()
+    _plot_latent_space(fig, 1, 1, latent, eta_theta)
+    _plot_observed_space(fig, 1, n_col, obs, mu, classes)
+    return save_plotly_figure(fig, title)
