@@ -8,7 +8,7 @@ from torch.utils.data import Dataset
 
 class WindowData(Dataset):
     def __init__(self, data, window_length):
-        n_windows = len(data) % window_length
+        n_windows = len(data) / window_length
         windows = [
             (i * window_length, (i + 1) * window_length) for i in range(n_windows)
         ]
